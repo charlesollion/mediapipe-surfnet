@@ -80,6 +80,16 @@ mediapipe_proto_library(
     ],
 )
 
+# mediapipe_proto_library(
+#     name = "tflite_yolo_tensors_to_dummy_calculator_proto",
+#     srcs = ["tflite_yolo_tensors_to_dummy_calculator.proto"],
+#     visibility = ["//visibility:public"],
+#     deps = [
+#         "//mediapipe/framework:calculator_options_proto",
+#         "//mediapipe/framework:calculator_proto",
+#     ],
+# )
+
 mediapipe_proto_library(
     name = "tflite_tensors_to_classification_calculator_proto",
     srcs = ["tflite_tensors_to_classification_calculator.proto"],
@@ -410,6 +420,56 @@ cc_library(
     deps = [
         "//mediapipe/util/tflite:config",
         ":tflite_tensors_to_detections_calculator_cc_proto",
+        "//mediapipe/framework/formats:detection_cc_proto",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
+        "//mediapipe/framework/deps:file_path",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:location",
+        "//mediapipe/framework/formats/object_detection:anchor_cc_proto",
+        "//mediapipe/framework/port:ret_check",
+        "@org_tensorflow//tensorflow/lite:framework",
+    ] + selects.with_or({
+        ":gpu_inference_disabled": [],
+        "//mediapipe:ios": [
+            "//mediapipe/gpu:MPPMetalUtil",
+            "//mediapipe/gpu:gpu_buffer",
+            "//mediapipe/gpu:MPPMetalHelper",
+            "//mediapipe/objc:mediapipe_framework_ios",
+            "@org_tensorflow//tensorflow/lite/delegates/gpu:metal_delegate",
+        ],
+        "//conditions:default": [
+            "//mediapipe/gpu:gl_calculator_helper",
+            "@org_tensorflow//tensorflow/lite/delegates/gpu:gl_delegate",
+            "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:gl_buffer",
+            "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:gl_program",
+            "@org_tensorflow//tensorflow/lite/delegates/gpu/gl:gl_shader",
+        ],
+    }),
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "tflite_yolo_tensors_to_dummy_calculator",
+    srcs = ["tflite_yolo_tensors_to_dummy_calculator.cc"],
+    copts = select({
+        "//mediapipe:ios": [
+            "-x objective-c++",
+            "-fobjc-arc",  # enable reference-counting
+        ],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "//mediapipe:ios": [
+            "-framework CoreVideo",
+            "-framework MetalKit",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mediapipe/util/tflite:config",
+        # ":tflite_yolo_tensors_to_dummy_calculator_cc_proto",
         "//mediapipe/framework/formats:detection_cc_proto",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
