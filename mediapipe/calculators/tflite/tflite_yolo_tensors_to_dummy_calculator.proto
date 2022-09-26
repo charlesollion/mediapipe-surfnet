@@ -1,0 +1,39 @@
+// Copyright 2019 The MediaPipe Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The option proto for the TfLiteYoloTensorsToDummyCalculator.
+
+syntax = "proto2";
+
+package mediapipe;
+
+import "mediapipe/framework/calculator.proto";
+
+message TfLiteYoloTensorsToDummyCalculatorOptions {
+  extend .mediapipe.CalculatorOptions {
+    optional TfLiteYoloTensorsToDummyCalculatorOptions ext = 246514967;
+  }
+  // The number of output coords predicted by the detection model (5 + number of classes)
+  optional int32 num_coords = 1 [default = 85];  // required
+  // The max number of detections before NMS
+  optional int32 max_detections = 2 [default = 100];  // required
+  // The number of boxes predicted by yolo (25200).
+  optional int32 num_boxes = 3 [default = 25200];  // required
+  // The minimum output score to consider the box (around 0.3 for yolo)
+  optional float min_conf_thresh = 4 [default = 0.3];  // required
+  // Whether to flip the boxes (depending on the coordinate system)
+  optional bool flip_vertically = 5 [default = false];
+  // invert x and y output
+  optional bool reverse_output_order = 6 [default = false];
+}
