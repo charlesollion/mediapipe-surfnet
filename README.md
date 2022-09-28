@@ -9,8 +9,20 @@ This is a work in progress repository, the final repository will be different.
 Follow instructions from [MediaPipe Github repository](https://github.com/google/mediapipe)
 
 Be careful to update correctly the opencv
-```ssh
+```sh
 third_party/opencv_linux.BUILD
+```
+#### Android
+
+Add to `.bashrc`
+```
+export ANDROID_HOME=$HOME/Android/Sdk
+export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/21.4.7075529
+```
+
+```sh
+source ~/.bashrc
+sudo apt-get install openjdk-11-jdk
 ```
 
 ### Build

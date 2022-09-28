@@ -16,6 +16,7 @@ licenses(["notice"])
 
 package(default_visibility = ["//visibility:public"])
 
+# This is the one used for android
 cc_library(
     name = "mobile_calculators",
     deps = [
@@ -30,6 +31,7 @@ cc_library(
         "//mediapipe/calculators/util:detection_letterbox_removal_calculator",
         "//mediapipe/calculators/util:detections_to_render_data_calculator",
         "//mediapipe/calculators/util:non_max_suppression_calculator",
+        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_dummy_calculator",
         "//mediapipe/gpu:gpu_buffer_to_image_frame_calculator",
         "//mediapipe/gpu:image_frame_to_gpu_buffer_calculator",
     ],
@@ -53,7 +55,7 @@ cc_library(
     ],
 )
 
-# This is the one used
+# This is the one used for desktop
 cc_library(
     name = "desktop_tflite_calculators",
     deps = [
@@ -81,10 +83,11 @@ load(
     "mediapipe_binary_graph",
 )
 
+# This is the one used
 mediapipe_binary_graph(
-    name = "mobile_cpu_binary_graph",
-    graph = "object_detection_mobile_cpu.pbtxt",
-    output_name = "mobile_cpu.binarypb",
+    name = "mobile_surfnet_cpu_binary_graph",
+    graph = "mobile_surfnet.pbtxt",
+    output_name = "mobile_surfnet_cpu.binarypb",
     deps = [":mobile_calculators"],
 )
 

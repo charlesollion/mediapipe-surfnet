@@ -1,0 +1,10 @@
+    Fragment
+    Insulating
+    Bottle
+    Can
+    Drum
+    Packaging
+    Tire
+    Fishing net
+    Easily namable
+    Unclear
