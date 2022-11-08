@@ -12,21 +12,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//mediapipe/framework/port:build_config.bzl", "mediapipe_proto_library")
-
 package(default_visibility = ["//mediapipe/tasks:internal"])
 
 licenses(["notice"])
 
-mediapipe_proto_library(
-    name = "category_proto",
-    srcs = ["category.proto"],
+cc_library(
+    name = "rect",
+    hdrs = ["rect.h"],
 )
 
-mediapipe_proto_library(
-    name = "classifications_proto",
-    srcs = ["classifications.proto"],
+cc_library(
+    name = "gesture_recognition_result",
+    hdrs = ["gesture_recognition_result.h"],
     deps = [
-        ":category_proto",
+        "//mediapipe/framework/formats:classification_cc_proto",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "hand_landmarks_detection_result",
+    hdrs = ["hand_landmarks_detection_result.h"],
+    deps = [
+        "//mediapipe/framework/formats:classification_cc_proto",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "category",
+    srcs = ["category.cc"],
+    hdrs = ["category.h"],
+    deps = [
+        "//mediapipe/framework/formats:classification_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "classification_result",
+    srcs = ["classification_result.cc"],
+    hdrs = ["classification_result.h"],
+    deps = [
+        ":category",
+        "//mediapipe/framework/formats:classification_cc_proto",
+        "//mediapipe/tasks/cc/components/containers/proto:classifications_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "embedding_result",
+    srcs = ["embedding_result.cc"],
+    hdrs = ["embedding_result.h"],
+    deps = [
+        "//mediapipe/tasks/cc/components/containers/proto:embeddings_cc_proto",
     ],
 )

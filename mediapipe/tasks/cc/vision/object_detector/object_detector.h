@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -28,6 +29,7 @@ limitations under the License.
 #include "mediapipe/framework/formats/image.h"
 #include "mediapipe/tasks/cc/core/base_options.h"
 #include "mediapipe/tasks/cc/vision/core/base_vision_task_api.h"
+#include "mediapipe/tasks/cc/vision/core/image_processing_options.h"
 #include "mediapipe/tasks/cc/vision/core/running_mode.h"
 
 namespace mediapipe {
@@ -113,11 +115,17 @@ struct ObjectDetectorOptions {
 //  (kTfLiteFloat32)
 //   - scores tensor of size `[num_results]`, each value representing the score
 //     of the detected object.
+//   - optional score calibration can be attached using ScoreCalibrationOptions
+//     and an AssociatedFile with type TENSOR_AXIS_SCORE_CALIBRATION. See
+//     metadata_schema.fbs [1] for more details.
 //  (kTfLiteFloat32)
 //   - integer num_results as a tensor of size `[1]`
 //
 // An example of such model can be found at:
 // https://tfhub.dev/google/lite-model/object_detection/mobile_object_localizer_v1/1/metadata/1
+//
+// [1]:
+// https://github.com/google/mediapipe/blob/6cdc6443b6a7ed662744e2a2ce2d58d9c83e6d6f/mediapipe/tasks/metadata/metadata_schema.fbs#L456
 class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
  public:
   using BaseVisionTaskApi::BaseVisionTaskApi;
@@ -145,6 +153,12 @@ class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
   // TODO: Describes how the input image will be preprocessed
   // after the yuv support is implemented.
   //
+  // The optional 'image_processing_options' parameter can be used to specify
+  // the rotation to apply to the image before performing detection, by
+  // setting its 'rotation_degrees' field. Note that specifying a
+  // region-of-interest using the 'region_of_interest' field is NOT supported
+  // and will result in an invalid argument error being returned.
+  //
   // For CPU images, the returned bounding boxes are expressed in the
   // unrotated input frame of reference coordinates system, i.e. in `[0,
   // image_width) x [0, image_height)`, which are the dimensions of the
@@ -152,7 +166,9 @@ class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
   // TODO: Describes the output bounding boxes for gpu input
   // images after enabling the gpu support in MediaPipe Tasks.
   absl::StatusOr<std::vector<mediapipe::Detection>> Detect(
-      mediapipe::Image image);
+      mediapipe::Image image,
+      std::optional<core::ImageProcessingOptions> image_processing_options =
+          std::nullopt);
 
   // Performs object detection on the provided video frame.
   // Only use this method when the ObjectDetector is created with the video
@@ -162,12 +178,20 @@ class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
   // provide the video frame's timestamp (in milliseconds). The input timestamps
   // must be monotonically increasing.
   //
+  // The optional 'image_processing_options' parameter can be used to specify
+  // the rotation to apply to the image before performing detection, by
+  // setting its 'rotation_degrees' field. Note that specifying a
+  // region-of-interest using the 'region_of_interest' field is NOT supported
+  // and will result in an invalid argument error being returned.
+  //
   // For CPU images, the returned bounding boxes are expressed in the
   // unrotated input frame of reference coordinates system, i.e. in `[0,
   // image_width) x [0, image_height)`, which are the dimensions of the
   // underlying image data.
-  absl::StatusOr<std::vector<mediapipe::Detection>> Detect(
-      mediapipe::Image image, int64 timestamp_ms);
+  absl::StatusOr<std::vector<mediapipe::Detection>> DetectForVideo(
+      mediapipe::Image image, int64 timestamp_ms,
+      std::optional<core::ImageProcessingOptions> image_processing_options =
+          std::nullopt);
 
   // Sends live image data to perform object detection, and the results will be
   // available via the "result_callback" provided in the ObjectDetectorOptions.
@@ -179,7 +203,13 @@ class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
   // sent to the object detector. The input timestamps must be monotonically
   // increasing.
   //
-  // The "result_callback" prvoides
+  // The optional 'image_processing_options' parameter can be used to specify
+  // the rotation to apply to the image before performing detection, by
+  // setting its 'rotation_degrees' field. Note that specifying a
+  // region-of-interest using the 'region_of_interest' field is NOT supported
+  // and will result in an invalid argument error being returned.
+  //
+  // The "result_callback" provides
   //   - A vector of detections, each has a bounding box that is expressed in
   //     the unrotated input frame of reference coordinates system, i.e. in `[0,
   //     image_width) x [0, image_height)`, which are the dimensions of the
@@ -189,7 +219,9 @@ class ObjectDetector : tasks::vision::core::BaseVisionTaskApi {
   //     longer be valid when the callback returns. To access the image data
   //     outside of the callback, callers need to make a copy of the image.
   //   - The input timestamp in milliseconds.
-  absl::Status DetectAsync(mediapipe::Image image, int64 timestamp_ms);
+  absl::Status DetectAsync(mediapipe::Image image, int64 timestamp_ms,
+                           std::optional<core::ImageProcessingOptions>
+                               image_processing_options = std::nullopt);
 
   // Shuts down the ObjectDetector when all works are done.
   absl::Status Close() { return runner_->Close(); }

@@ -48,6 +48,8 @@ pybind_extension(
         "//mediapipe/python/pybind:timestamp",
         "//mediapipe/python/pybind:validated_graph_config",
         "//mediapipe/tasks/python/core/pybind:task_runner",
+        "@com_google_absl//absl/strings:str_format",
+        "@stblib//:stb_image",
         # Type registration.
         "//mediapipe/framework:basic_types_registration",
         "//mediapipe/framework/formats:classification_registration",
@@ -85,8 +87,19 @@ cc_library(
 cc_library(
     name = "builtin_task_graphs",
     deps = [
+        "//mediapipe/tasks/cc/vision/gesture_recognizer:gesture_recognizer_graph",
+        "//mediapipe/tasks/cc/vision/image_classifier:image_classifier_graph",
+        "//mediapipe/tasks/cc/vision/image_segmenter:image_segmenter_graph",
         "//mediapipe/tasks/cc/vision/object_detector:object_detector_graph",
-    ],
+    ] + select({
+        # TODO: Build text_classifier_graph on Windows.
+        # TODO: Build audio_classifier_graph on Windows.
+        "//mediapipe:windows": [],
+        "//conditions:default": [
+            "//mediapipe/tasks/cc/audio/audio_classifier:audio_classifier_graph",
+            "//mediapipe/tasks/cc/text/text_classifier:text_classifier_graph",
+        ],
+    }),
 )
 
 py_library(

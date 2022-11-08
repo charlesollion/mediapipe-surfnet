@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The MediaPipe Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
 """Category data class."""
 
 import dataclasses
-from typing import Any
+from typing import Any, Optional
 
-from mediapipe.tasks.cc.components.containers import category_pb2
+from mediapipe.tasks.cc.components.containers.proto import category_pb2
 from mediapipe.tasks.python.core.optional_dependencies import doc_controls
 
 _CategoryProto = category_pb2.Category
@@ -39,10 +39,10 @@ class Category:
     category_name: The label of this category object.
   """
 
-  index: int
-  score: float
-  display_name: str
-  category_name: str
+  index: Optional[int] = None
+  score: Optional[float] = None
+  display_name: Optional[str] = None
+  category_name: Optional[str] = None
 
   @doc_controls.do_not_generate_docs
   def to_pb2(self) -> _CategoryProto:

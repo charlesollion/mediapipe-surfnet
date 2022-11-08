@@ -1,14 +1,13 @@
 #ifndef MEDIAPIPE_FRAMEWORK_API2_BUILDER_H_
 #define MEDIAPIPE_FRAMEWORK_API2_BUILDER_H_
 
+#include <memory>
 #include <string>
 #include <type_traits>
+#include <vector>
 
-#include "absl/container/flat_hash_map.h"
-#include "mediapipe/framework/api2/const_str.h"
-#include "mediapipe/framework/api2/contract.h"
-#include "mediapipe/framework/api2/node.h"
-#include "mediapipe/framework/api2/packet.h"
+#include "absl/container/btree_map.h"
+#include "absl/strings/string_view.h"
 #include "mediapipe/framework/api2/port.h"
 #include "mediapipe/framework/calculator_base.h"
 #include "mediapipe/framework/calculator_contract.h"
@@ -46,7 +45,7 @@ struct TagIndexLocation {
 template <typename T>
 class TagIndexMap {
  public:
-  std::vector<std::unique_ptr<T>>& operator[](const std::string& tag) {
+  std::vector<std::unique_ptr<T>>& operator[](absl::string_view tag) {
     return map_[tag];
   }
 
@@ -72,11 +71,12 @@ class TagIndexMap {
 
   // Note: entries are held by a unique_ptr to ensure pointers remain valid.
   // Should use absl::flat_hash_map but ordering keys for now.
-  std::map<std::string, std::vector<std::unique_ptr<T>>> map_;
+  absl::btree_map<std::string, std::vector<std::unique_ptr<T>>> map_;
 };
 
 class Graph;
 class NodeBase;
+class PacketGenerator;
 
 // These structs are used internally to store information about the endpoints
 // of a connection.
@@ -110,6 +110,17 @@ class MultiPort : public Single {
   std::vector<std::unique_ptr<Base>>& vec_;
 };
 
+namespace internal_builder {
+
+template <typename T, typename U>
+using AllowCast = std::integral_constant<bool, std::is_same_v<T, AnyType> &&
+                                                   !std::is_same_v<T, U>>;
+
+}  // namespace internal_builder
+
+template <bool IsSide, typename T = internal::Generic>
+class SourceImpl;
+
 // These classes wrap references to the underlying source/destination
 // endpoints, adding type information and the user-visible API.
 template <bool IsSide, typename T = internal::Generic>
@@ -120,19 +131,25 @@ class DestinationImpl {
   explicit DestinationImpl(std::vector<std::unique_ptr<Base>>* vec)
       : DestinationImpl(&GetWithAutoGrow(vec, 0)) {}
   explicit DestinationImpl(DestinationBase* base) : base_(*base) {}
+
+  template <typename U,
+            std::enable_if_t<internal_builder::AllowCast<T, U>{}, int> = 0>
+  DestinationImpl<IsSide, U> Cast() {
+    return DestinationImpl<IsSide, U>(&base_);
+  }
+
+ private:
   DestinationBase& base_;
+
+  template <bool Source_IsSide, typename Source_T>
+  friend class SourceImpl;
 };
 
 template <bool IsSide, typename T>
-class MultiDestinationImpl : public MultiPort<DestinationImpl<IsSide, T>> {
- public:
-  using MultiPort<DestinationImpl<IsSide, T>>::MultiPort;
-};
-
-template <bool IsSide, typename T = internal::Generic>
 class SourceImpl {
  public:
   using Base = SourceBase;
+  using PayloadT = T;
 
   // Src is used as the return type of fluent methods below. Since these are
   // single-port methods, it is desirable to always decay to a reference to the
@@ -169,15 +186,15 @@ class SourceImpl {
     return AddTarget(dest);
   }
 
+  template <typename U,
+            std::enable_if_t<internal_builder::AllowCast<T, U>{}, int> = 0>
+  SourceImpl<IsSide, U> Cast() {
+    return SourceImpl<IsSide, U>(base_);
+  }
+
  private:
   // Never null.
   SourceBase* base_;
-};
-
-template <bool IsSide, typename T>
-class MultiSourceImpl : public MultiPort<SourceImpl<IsSide, T>> {
- public:
-  using MultiPort<SourceImpl<IsSide, T>>::MultiPort;
 };
 
 // A source and a destination correspond to an output/input stream on a node,
@@ -188,21 +205,72 @@ class MultiSourceImpl : public MultiPort<SourceImpl<IsSide, T>> {
 // when building the graph.
 template <typename T = internal::Generic>
 using Source = SourceImpl<false, T>;
+
+// Represents a stream of packets of a particular type.
+//
+// The intended use:
+// - decouple input/output streams from graph/node during graph construction
+// - pass streams around and connect them as needed, extracting reusable parts
+//   to utility/convenience functions or classes.
+//
+// For example:
+//   Stream<Image> Resize(Stream<Image> image, const Size& size, Graph& graph) {
+//     auto& scaler_node = graph.AddNode("GlScalerCalculator");
+//     auto& opts = scaler_node.GetOptions<GlScalerCalculatorOptions>();
+//     opts.set_output_width(size.width);
+//     opts.set_output_height(size.height);
+//     a >> scaler_node.In("IMAGE");
+//     return scaler_node.Out("IMAGE").Cast<Image>();
+//   }
+//
+// Where graph can use it as:
+//   Graph graph;
+//   Stream<Image> input_image = graph.In("INPUT_IMAGE").Cast<Image>();
+//   Stream<Image> resized_image = Resize(input_image, {64, 64}, graph);
+template <typename T>
+using Stream = Source<T>;
+
 template <typename T = internal::Generic>
-using MultiSource = MultiSourceImpl<false, T>;
+using MultiSource = MultiPort<Source<T>>;
+
 template <typename T = internal::Generic>
 using SideSource = SourceImpl<true, T>;
+
+// Represents a side packet of a particular type.
+//
+// The intended use:
+// - decouple input/output side packets from graph/node during graph
+//   construction
+// - pass side packets around and connect them as needed, extracting reusable
+//   parts utility/convenience functions or classes.
+//
+// For example:
+//   SidePacket<TfLiteModelPtr> GetModel(SidePacket<std::string> model_blob,
+//                                       Graph& graph) {
+//     auto& model_node = graph.AddNode("TfLiteModelCalculator");
+//     model_blob >> model_node.SideIn("MODEL_BLOB");
+//     return model_node.SideOut("MODEL").Cast<TfLiteModelPtr>();
+//   }
+//
+// Where graph can use it as:
+//   Graph graph;
+//   SidePacket<std::string> model_blob =
+//     graph.SideIn("MODEL_BLOB").Cast<std::string>();
+//   SidePacket<TfLiteModelPtr> model = GetModel(model_blob, graph);
+template <typename T>
+using SidePacket = SideSource<T>;
+
 template <typename T = internal::Generic>
-using MultiSideSource = MultiSourceImpl<true, T>;
+using MultiSideSource = MultiPort<SideSource<T>>;
 
 template <typename T = internal::Generic>
 using Destination = DestinationImpl<false, T>;
 template <typename T = internal::Generic>
 using SideDestination = DestinationImpl<true, T>;
 template <typename T = internal::Generic>
-using MultiDestination = MultiDestinationImpl<false, T>;
+using MultiDestination = MultiPort<Destination<T>>;
 template <typename T = internal::Generic>
-using MultiSideDestination = MultiDestinationImpl<true, T>;
+using MultiSideDestination = MultiPort<SideDestination<T>>;
 
 class NodeBase {
  public:
@@ -212,19 +280,19 @@ class NodeBase {
   // of its entries by index. However, for nodes without visible contracts we
   // can't know whether a tag is indexable or not, so we would need the
   // multi-port to also be usable as a port directly (representing index 0).
-  MultiSource<> Out(const std::string& tag) {
+  MultiSource<> Out(absl::string_view tag) {
     return MultiSource<>(&out_streams_[tag]);
   }
 
-  MultiDestination<> In(const std::string& tag) {
+  MultiDestination<> In(absl::string_view tag) {
     return MultiDestination<>(&in_streams_[tag]);
   }
 
-  MultiSideSource<> SideOut(const std::string& tag) {
+  MultiSideSource<> SideOut(absl::string_view tag) {
     return MultiSideSource<>(&out_sides_[tag]);
   }
 
-  MultiSideDestination<> SideIn(const std::string& tag) {
+  MultiSideDestination<> SideIn(absl::string_view tag) {
     return MultiSideDestination<>(&in_sides_[tag]);
   }
 
@@ -276,8 +344,15 @@ class NodeBase {
 
   template <typename T>
   T& GetOptions() {
+    return GetOptions(T::ext);
+  }
+
+  // Use this API when the proto extension does not follow the "ext" naming
+  // convention.
+  template <typename E>
+  auto& GetOptions(const E& extension) {
     options_used_ = true;
-    return *options_.MutableExtension(T::ext);
+    return *options_.MutableExtension(extension);
   }
 
  protected:
@@ -359,11 +434,11 @@ class PacketGenerator {
  public:
   PacketGenerator(std::string type) : type_(std::move(type)) {}
 
-  MultiSideSource<> SideOut(const std::string& tag) {
+  MultiSideSource<> SideOut(absl::string_view tag) {
     return MultiSideSource<>(&out_sides_[tag]);
   }
 
-  MultiSideDestination<> SideIn(const std::string& tag) {
+  MultiSideDestination<> SideIn(absl::string_view tag) {
     return MultiSideDestination<>(&in_sides_[tag]);
   }
 
@@ -373,8 +448,15 @@ class PacketGenerator {
 
   template <typename T>
   T& GetOptions() {
+    return GetOptions(T::ext);
+  }
+
+  // Use this API when the proto extension does not follow the "ext" naming
+  // convention.
+  template <typename E>
+  auto& GetOptions(const E& extension) {
     options_used_ = true;
-    return *options_.MutableExtension(T::ext);
+    return *options_.MutableExtension(extension);
   }
 
   template <typename B, typename T, bool kIsOptional, bool kIsMultiple>
@@ -427,8 +509,9 @@ class Graph {
   // Creates a node of a specific type. Should be used for pure interfaces,
   // which do not have a built-in type string.
   template <class Calc>
-  Node<Calc>& AddNode(const std::string& type) {
-    auto node = std::make_unique<Node<Calc>>(type);
+  Node<Calc>& AddNode(absl::string_view type) {
+    auto node =
+        std::make_unique<Node<Calc>>(std::string(type.data(), type.size()));
     auto node_p = node.get();
     nodes_.emplace_back(std::move(node));
     return *node_p;
@@ -436,35 +519,37 @@ class Graph {
 
   // Creates a generic node, with no compile-time checking of inputs and
   // outputs. This can be used for calculators whose contract is not visible.
-  GenericNode& AddNode(const std::string& type) {
-    auto node = std::make_unique<GenericNode>(type);
+  GenericNode& AddNode(absl::string_view type) {
+    auto node =
+        std::make_unique<GenericNode>(std::string(type.data(), type.size()));
     auto node_p = node.get();
     nodes_.emplace_back(std::move(node));
     return *node_p;
   }
 
   // For legacy PacketGenerators.
-  PacketGenerator& AddPacketGenerator(const std::string& type) {
-    auto node = std::make_unique<PacketGenerator>(type);
+  PacketGenerator& AddPacketGenerator(absl::string_view type) {
+    auto node = std::make_unique<PacketGenerator>(
+        std::string(type.data(), type.size()));
     auto node_p = node.get();
     packet_gens_.emplace_back(std::move(node));
     return *node_p;
   }
 
   // Graph ports, non-typed.
-  MultiSource<> In(const std::string& graph_input) {
+  MultiSource<> In(absl::string_view graph_input) {
     return graph_boundary_.Out(graph_input);
   }
 
-  MultiDestination<> Out(const std::string& graph_output) {
+  MultiDestination<> Out(absl::string_view graph_output) {
     return graph_boundary_.In(graph_output);
   }
 
-  MultiSideSource<> SideIn(const std::string& graph_input) {
+  MultiSideSource<> SideIn(absl::string_view graph_input) {
     return graph_boundary_.SideOut(graph_input);
   }
 
-  MultiSideDestination<> SideOut(const std::string& graph_output) {
+  MultiSideDestination<> SideOut(absl::string_view graph_output) {
     return graph_boundary_.SideIn(graph_output);
   }
 

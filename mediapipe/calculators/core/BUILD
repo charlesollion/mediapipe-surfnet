@@ -222,10 +222,10 @@ cc_library(
         "//mediapipe/framework:calculator_contract",
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework:collection_item_id",
-        "//mediapipe/framework:packet",
         "//mediapipe/framework/formats:classification_cc_proto",
         "//mediapipe/framework/formats:detection_cc_proto",
         "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/formats:matrix",
         "//mediapipe/framework/formats:rect_cc_proto",
         "//mediapipe/framework/port:integral_types",
         "//mediapipe/framework/port:ret_check",
@@ -328,6 +328,7 @@ cc_library(
         ":concatenate_vector_calculator_cc_proto",
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/formats:classification_cc_proto",
         "//mediapipe/framework/formats:landmark_cc_proto",
         "//mediapipe/framework/port:ret_check",
         "//mediapipe/framework/port:status",
@@ -344,6 +345,7 @@ cc_test(
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework:calculator_runner",
         "//mediapipe/framework:timestamp",
+        "//mediapipe/framework/formats:classification_cc_proto",
         "//mediapipe/framework/formats:landmark_cc_proto",
         "//mediapipe/framework/port:gtest_main",
         "//mediapipe/framework/port:parse_text_proto",
@@ -934,6 +936,7 @@ cc_test(
         "//mediapipe/framework/tool:simulation_clock",
         "//mediapipe/framework/tool:simulation_clock_executor",
         "//mediapipe/framework/tool:sink",
+        "//mediapipe/util:packet_test_util",
         "@com_google_absl//absl/time",
     ],
 )
@@ -1294,8 +1297,8 @@ cc_library(
     deps = [
         ":get_vector_item_calculator_cc_proto",
         "//mediapipe/framework:calculator_framework",
-        "//mediapipe/framework:packet",
         "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/api2:packet",
         "//mediapipe/framework/api2:port",
         "//mediapipe/framework/formats:classification_cc_proto",
         "//mediapipe/framework/formats:landmark_cc_proto",
@@ -1316,6 +1319,32 @@ cc_test(
         "//mediapipe/framework/port:parse_text_proto",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "vector_indices_calculator",
+    srcs = ["vector_indices_calculator.cc"],
+    hdrs = ["vector_indices_calculator.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/formats:landmark_cc_proto",
+        "//mediapipe/framework/port:status",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "vector_indices_calculator_test",
+    srcs = ["vector_indices_calculator_test.cc"],
+    deps = [
+        ":vector_indices_calculator",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:calculator_runner",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
     ],
 )
 
@@ -1383,4 +1412,46 @@ cc_library(
         "@com_google_absl//absl/status",
     ],
     alwayslink = 1,
+)
+
+mediapipe_proto_library(
+    name = "bypass_calculator_proto",
+    srcs = ["bypass_calculator.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
+cc_library(
+    name = "bypass_calculator",
+    srcs = ["bypass_calculator.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":bypass_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:collection_item_id",
+        "//mediapipe/framework/api2:node",
+        "//mediapipe/framework/port:status",
+    ],
+    alwayslink = 1,
+)
+
+cc_test(
+    name = "bypass_calculator_test",
+    srcs = ["bypass_calculator_test.cc"],
+    deps = [
+        ":bypass_calculator",
+        ":pass_through_calculator",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework:calculator_runner",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/framework/tool:switch_container",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+    ],
 )

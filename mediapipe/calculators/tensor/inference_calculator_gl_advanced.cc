@@ -25,12 +25,14 @@
 #include "mediapipe/gpu/gl_calculator_helper.h"
 #include "mediapipe/util/tflite/tflite_gpu_runner.h"
 
-#if defined(MEDIAPIPE_ANDROID)
+#if defined(MEDIAPIPE_ANDROID) || defined(MEDIAPIPE_CHROMIUMOS)
 #include "mediapipe/framework/deps/file_path.h"
 #include "mediapipe/util/android/file/base/file.h"
 #include "mediapipe/util/android/file/base/filesystem.h"
 #include "mediapipe/util/android/file/base/helpers.h"
-#endif  // MEDIAPIPE_ANDROID
+#endif  // defined(MEDIAPIPE_ANDROID) || defined(MEDIAPIPE_CHROMIUMOS)
+
+#define PERFETTO_TRACK_EVENT_NAMESPACE mediapipe
 
 namespace mediapipe {
 namespace api2 {
@@ -83,7 +85,7 @@ class InferenceCalculatorGlAdvancedImpl
         const mediapipe::InferenceCalculatorOptions::Delegate& delegate);
 
     absl::StatusOr<std::vector<Tensor>> Process(
-        const std::vector<Tensor>& input_tensors);
+        CalculatorContext* cc, const std::vector<Tensor>& input_tensors);
 
     absl::Status Close();
 
@@ -121,11 +123,11 @@ absl::Status InferenceCalculatorGlAdvancedImpl::GpuInferenceRunner::Init(
 
 absl::StatusOr<std::vector<Tensor>>
 InferenceCalculatorGlAdvancedImpl::GpuInferenceRunner::Process(
-    const std::vector<Tensor>& input_tensors) {
+    CalculatorContext* cc, const std::vector<Tensor>& input_tensors) {
   std::vector<Tensor> output_tensors;
 
   MP_RETURN_IF_ERROR(gpu_helper_.RunInGlContext(
-      [this, &input_tensors, &output_tensors]() -> absl::Status {
+      [this, cc, &input_tensors, &output_tensors]() -> absl::Status {
         for (int i = 0; i < input_tensors.size(); ++i) {
           MP_RETURN_IF_ERROR(tflite_gpu_runner_->BindSSBOToInputTensor(
               input_tensors[i].GetOpenGlBufferReadView().name(), i));
@@ -138,7 +140,10 @@ InferenceCalculatorGlAdvancedImpl::GpuInferenceRunner::Process(
               output_tensors.back().GetOpenGlBufferWriteView().name(), i));
         }
         // Run inference.
-        return tflite_gpu_runner_->Invoke();
+        {
+          MEDIAPIPE_PROFILING(GPU_TASK_INVOKE, cc);
+          return tflite_gpu_runner_->Invoke();
+        }
       }));
 
   return output_tensors;
@@ -226,7 +231,7 @@ InferenceCalculatorGlAdvancedImpl::GpuInferenceRunner::InitTFLiteGPURunner(
   return tflite_gpu_runner_->Build();
 }
 
-#if defined(MEDIAPIPE_ANDROID)
+#if defined(MEDIAPIPE_ANDROID) || defined(MEDIAPIPE_CHROMIUMOS)
 absl::Status InferenceCalculatorGlAdvancedImpl::OnDiskCacheHelper::Init(
     const mediapipe::InferenceCalculatorOptions& options,
     const mediapipe::InferenceCalculatorOptions::Delegate::Gpu&
@@ -313,7 +318,7 @@ InferenceCalculatorGlAdvancedImpl::OnDiskCacheHelper::SaveGpuCaches(
     tflite::gpu::TFLiteGPURunner* gpu_runner) const {
   return absl::OkStatus();
 }
-#endif  // MEDIAPIPE_ANDROID
+#endif  // defined(MEDIAPIPE_ANDROID) || defined(MEDIAPIPE_CHROMIUMOS)
 
 absl::Status InferenceCalculatorGlAdvancedImpl::UpdateContract(
     CalculatorContract* cc) {
@@ -354,7 +359,7 @@ absl::Status InferenceCalculatorGlAdvancedImpl::Process(CalculatorContext* cc) {
   auto output_tensors = absl::make_unique<std::vector<Tensor>>();
 
   ASSIGN_OR_RETURN(*output_tensors,
-                   gpu_inference_runner_->Process(input_tensors));
+                   gpu_inference_runner_->Process(cc, input_tensors));
 
   kOutTensors(cc).Send(std::move(output_tensors));
   return absl::OkStatus();

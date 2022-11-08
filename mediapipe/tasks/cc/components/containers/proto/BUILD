@@ -19,6 +19,25 @@ package(default_visibility = ["//mediapipe/tasks:internal"])
 licenses(["notice"])
 
 mediapipe_proto_library(
+    name = "category_proto",
+    srcs = ["category.proto"],
+)
+
+mediapipe_proto_library(
+    name = "classifications_proto",
+    srcs = ["classifications.proto"],
+    deps = [
+        ":category_proto",
+        "//mediapipe/framework/formats:classification_proto",
+    ],
+)
+
+mediapipe_proto_library(
+    name = "embeddings_proto",
+    srcs = ["embeddings.proto"],
+)
+
+mediapipe_proto_library(
     name = "landmarks_detection_result_proto",
     srcs = [
         "landmarks_detection_result.proto",

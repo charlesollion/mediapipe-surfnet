@@ -271,6 +271,7 @@ cc_library(
     deps = [
         ":gpu_buffer_format",
         ":gpu_buffer_storage",
+        "@com_google_absl//absl/strings",
         "//mediapipe/framework/formats:image_frame",
         "//mediapipe/framework/port:logging",
         ":gpu_buffer_storage_image_frame",
@@ -363,6 +364,26 @@ cc_library(
         ":gpu_buffer_format",
         ":gpu_buffer_storage",
         "//mediapipe/framework/formats:image_frame",
+    ],
+)
+
+cc_library(
+    name = "gpu_buffer_storage_ahwb",
+    srcs = ["gpu_buffer_storage_ahwb.cc"],
+    hdrs = ["gpu_buffer_storage_ahwb.h"],
+    linkopts = select({
+        "//conditions:default": [],
+        "//mediapipe:android": [
+            "-landroid",
+        ],
+    }),
+    deps = [
+        ":gl_texture_buffer",
+        ":gpu_buffer_format",
+        ":gpu_buffer_storage",
+        ":image_frame_view",
+        "//mediapipe/framework/formats:image_frame",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -1032,7 +1053,7 @@ objc_library(
     alwayslink = 1,
 )
 
-MIN_IOS_VERSION = "9.0"  # For thread_local.
+MIN_IOS_VERSION = "11.0"
 
 test_suite(
     name = "ios",
@@ -1086,4 +1107,20 @@ ios_unit_test(
         "ios",
     ],
     deps = [":gl_ios_test_lib"],
+)
+
+mediapipe_cc_test(
+    name = "gpu_buffer_storage_ahwb_test",
+    size = "small",
+    srcs = ["gpu_buffer_storage_ahwb_test.cc"],
+    exclude_platforms = [
+        "ios",
+        "wasm",
+    ],
+    requires_full_emulation = True,
+    deps = [
+        ":gpu_buffer_format",
+        ":gpu_buffer_storage_ahwb",
+        "//mediapipe/framework/port:gtest_main",
+    ],
 )

@@ -29,11 +29,11 @@ limitations under the License.
 #include "mediapipe/framework/port/opencv_imgcodecs_inc.h"
 #include "mediapipe/framework/port/status_matchers.h"
 #include "mediapipe/tasks/cc/components/calculators/tensor/tensors_to_segmentation_calculator.pb.h"
-#include "mediapipe/tasks/cc/components/segmenter_options.pb.h"
+#include "mediapipe/tasks/cc/components/containers/rect.h"
 #include "mediapipe/tasks/cc/core/proto/base_options.pb.h"
 #include "mediapipe/tasks/cc/core/proto/external_file.pb.h"
-#include "mediapipe/tasks/cc/vision/image_segmenter/image_segmenter_op_resolvers.h"
-#include "mediapipe/tasks/cc/vision/image_segmenter/proto/image_segmenter_options.pb.h"
+#include "mediapipe/tasks/cc/vision/core/image_processing_options.h"
+#include "mediapipe/tasks/cc/vision/image_segmenter/proto/image_segmenter_graph_options.pb.h"
 #include "mediapipe/tasks/cc/vision/utils/image_utils.h"
 #include "tensorflow/lite/core/shims/cc/shims_test_util.h"
 #include "tensorflow/lite/kernels/builtin_op_kernels.h"
@@ -42,10 +42,13 @@ limitations under the License.
 namespace mediapipe {
 namespace tasks {
 namespace vision {
+namespace image_segmenter {
 namespace {
 
 using ::mediapipe::Image;
 using ::mediapipe::file::JoinPath;
+using ::mediapipe::tasks::components::containers::Rect;
+using ::mediapipe::tasks::vision::core::ImageProcessingOptions;
 using ::testing::HasSubstr;
 using ::testing::Optional;
 
@@ -164,7 +167,7 @@ class DeepLabOpResolverMissingOps : public ::tflite::MutableOpResolver {
 
 TEST_F(CreateFromOptionsTest, SucceedsWithSelectiveOpResolver) {
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
   options->base_options.op_resolver = absl::make_unique<DeepLabOpResolver>();
   MP_ASSERT_OK(ImageSegmenter::Create(std::move(options)));
@@ -172,7 +175,7 @@ TEST_F(CreateFromOptionsTest, SucceedsWithSelectiveOpResolver) {
 
 TEST_F(CreateFromOptionsTest, FailsWithSelectiveOpResolverMissingOps) {
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
   options->base_options.op_resolver =
       absl::make_unique<DeepLabOpResolverMissingOps>();
@@ -193,21 +196,21 @@ TEST_F(CreateFromOptionsTest, FailsWithMissingModel) {
   EXPECT_THAT(
       segmenter_or.status().message(),
       HasSubstr("ExternalFile must specify at least one of 'file_content', "
-                "'file_name' or 'file_descriptor_meta'."));
+                "'file_name', 'file_pointer_meta' or 'file_descriptor_meta'."));
   EXPECT_THAT(segmenter_or.status().GetPayload(kMediaPipeTasksPayload),
               Optional(absl::Cord(absl::StrCat(
                   MediaPipeTasksStatus::kRunnerInitializationError))));
 }
 
-class SegmentationTest : public tflite_shims::testing::Test {};
+class ImageModeTest : public tflite_shims::testing::Test {};
 
-TEST_F(SegmentationTest, SucceedsWithCategoryMask) {
+TEST_F(ImageModeTest, SucceedsWithCategoryMask) {
   MP_ASSERT_OK_AND_ASSIGN(
       Image image,
       DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
                                    "segmentation_input_rotation0.jpg")));
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
   options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
 
@@ -227,19 +230,18 @@ TEST_F(SegmentationTest, SucceedsWithCategoryMask) {
                                  kGoldenMaskMagnificationFactor));
 }
 
-TEST_F(SegmentationTest, SucceedsWithConfidenceMask) {
+TEST_F(ImageModeTest, SucceedsWithConfidenceMask) {
   MP_ASSERT_OK_AND_ASSIGN(
       Image image,
       DecodeImageFromFile(JoinPath("./", kTestDataDirectory, "cat.jpg")));
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
   options->output_type = ImageSegmenterOptions::OutputType::CONFIDENCE_MASK;
   options->activation = ImageSegmenterOptions::Activation::SOFTMAX;
 
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
                           ImageSegmenter::Create(std::move(options)));
-  MP_ASSERT_OK_AND_ASSIGN(auto results, segmenter->Segment(image));
   MP_ASSERT_OK_AND_ASSIGN(auto confidence_masks, segmenter->Segment(image));
   EXPECT_EQ(confidence_masks.size(), 21);
 
@@ -255,14 +257,67 @@ TEST_F(SegmentationTest, SucceedsWithConfidenceMask) {
               SimilarToFloatMask(expected_mask_float, kGoldenMaskSimilarity));
 }
 
-TEST_F(SegmentationTest, SucceedsSelfie128x128Segmentation) {
+TEST_F(ImageModeTest, SucceedsWithRotation) {
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image, DecodeImageFromFile(
+                       JoinPath("./", kTestDataDirectory, "cat_rotated.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CONFIDENCE_MASK;
+  options->activation = ImageSegmenterOptions::Activation::SOFTMAX;
+
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  ImageProcessingOptions image_processing_options;
+  image_processing_options.rotation_degrees = -90;
+  MP_ASSERT_OK_AND_ASSIGN(auto confidence_masks, segmenter->Segment(image));
+  EXPECT_EQ(confidence_masks.size(), 21);
+
+  cv::Mat expected_mask =
+      cv::imread(JoinPath("./", kTestDataDirectory, "cat_rotated_mask.jpg"),
+                 cv::IMREAD_GRAYSCALE);
+  cv::Mat expected_mask_float;
+  expected_mask.convertTo(expected_mask_float, CV_32FC1, 1 / 255.f);
+
+  // Cat category index 8.
+  cv::Mat cat_mask = mediapipe::formats::MatView(
+      confidence_masks[8].GetImageFrameSharedPtr().get());
+  EXPECT_THAT(cat_mask,
+              SimilarToFloatMask(expected_mask_float, kGoldenMaskSimilarity));
+}
+
+TEST_F(ImageModeTest, FailsWithRegionOfInterest) {
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image,
+      DecodeImageFromFile(JoinPath("./", kTestDataDirectory, "cat.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CONFIDENCE_MASK;
+  options->activation = ImageSegmenterOptions::Activation::SOFTMAX;
+
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  Rect roi{/*left=*/0.1, /*top=*/0, /*right=*/0.9, /*bottom=*/1};
+  ImageProcessingOptions image_processing_options{roi, /*rotation_degrees=*/0};
+
+  auto results = segmenter->Segment(image, image_processing_options);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("This task doesn't support region-of-interest"));
+  EXPECT_THAT(
+      results.status().GetPayload(kMediaPipeTasksPayload),
+      Optional(absl::Cord(absl::StrCat(
+          MediaPipeTasksStatus::kImageProcessingInvalidArgumentError))));
+}
+
+TEST_F(ImageModeTest, SucceedsSelfie128x128Segmentation) {
   Image image =
       GetSRGBImage(JoinPath("./", kTestDataDirectory, "mozart_square.jpg"));
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kSelfie128x128WithMetadata);
-  options->base_options.op_resolver =
-      absl::make_unique<SelfieSegmentationModelOpResolver>();
   options->output_type = ImageSegmenterOptions::OutputType::CONFIDENCE_MASK;
   options->activation = ImageSegmenterOptions::Activation::SOFTMAX;
 
@@ -285,14 +340,12 @@ TEST_F(SegmentationTest, SucceedsSelfie128x128Segmentation) {
               SimilarToFloatMask(expected_mask_float, kGoldenMaskSimilarity));
 }
 
-TEST_F(SegmentationTest, SucceedsSelfie144x256Segmentations) {
+TEST_F(ImageModeTest, SucceedsSelfie144x256Segmentations) {
   Image image =
       GetSRGBImage(JoinPath("./", kTestDataDirectory, "mozart_square.jpg"));
   auto options = std::make_unique<ImageSegmenterOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kSelfie144x256WithMetadata);
-  options->base_options.op_resolver =
-      absl::make_unique<SelfieSegmentationModelOpResolver>();
   options->output_type = ImageSegmenterOptions::OutputType::CONFIDENCE_MASK;
   options->activation = ImageSegmenterOptions::Activation::NONE;
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
@@ -313,9 +366,189 @@ TEST_F(SegmentationTest, SucceedsSelfie144x256Segmentations) {
               SimilarToFloatMask(expected_mask_float, kGoldenMaskSimilarity));
 }
 
+class VideoModeTest : public tflite_shims::testing::Test {};
+
+TEST_F(VideoModeTest, FailsWithCallingWrongMethod) {
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image,
+      DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
+                                   "segmentation_input_rotation0.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
+  options->running_mode = core::RunningMode::VIDEO;
+
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  auto results = segmenter->Segment(image);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("not initialized with the image mode"));
+  EXPECT_THAT(results.status().GetPayload(kMediaPipeTasksPayload),
+              Optional(absl::Cord(absl::StrCat(
+                  MediaPipeTasksStatus::kRunnerApiCalledInWrongModeError))));
+
+  results = segmenter->SegmentAsync(image, 0);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("not initialized with the live stream mode"));
+  EXPECT_THAT(results.status().GetPayload(kMediaPipeTasksPayload),
+              Optional(absl::Cord(absl::StrCat(
+                  MediaPipeTasksStatus::kRunnerApiCalledInWrongModeError))));
+  MP_ASSERT_OK(segmenter->Close());
+}
+
+TEST_F(VideoModeTest, Succeeds) {
+  constexpr int iterations = 100;
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image,
+      DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
+                                   "segmentation_input_rotation0.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
+  options->running_mode = core::RunningMode::VIDEO;
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  cv::Mat expected_mask = cv::imread(
+      JoinPath("./", kTestDataDirectory, "segmentation_golden_rotation0.png"),
+      cv::IMREAD_GRAYSCALE);
+  for (int i = 0; i < iterations; ++i) {
+    MP_ASSERT_OK_AND_ASSIGN(auto category_masks,
+                            segmenter->SegmentForVideo(image, i));
+    EXPECT_EQ(category_masks.size(), 1);
+    cv::Mat actual_mask = mediapipe::formats::MatView(
+        category_masks[0].GetImageFrameSharedPtr().get());
+    EXPECT_THAT(actual_mask,
+                SimilarToUint8Mask(expected_mask, kGoldenMaskSimilarity,
+                                   kGoldenMaskMagnificationFactor));
+  }
+  MP_ASSERT_OK(segmenter->Close());
+}
+
+class LiveStreamModeTest : public tflite_shims::testing::Test {};
+
+TEST_F(LiveStreamModeTest, FailsWithCallingWrongMethod) {
+  MP_ASSERT_OK_AND_ASSIGN(Image image, DecodeImageFromFile(JoinPath(
+                                           "./", kTestDataDirectory,
+                                           "cats_and_dogs_no_resizing.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
+  options->running_mode = core::RunningMode::LIVE_STREAM;
+  options->result_callback =
+      [](absl::StatusOr<std::vector<Image>> segmented_masks, const Image& image,
+         int64 timestamp_ms) {};
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+
+  auto results = segmenter->Segment(image);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("not initialized with the image mode"));
+  EXPECT_THAT(results.status().GetPayload(kMediaPipeTasksPayload),
+              Optional(absl::Cord(absl::StrCat(
+                  MediaPipeTasksStatus::kRunnerApiCalledInWrongModeError))));
+
+  results = segmenter->SegmentForVideo(image, 0);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("not initialized with the video mode"));
+  EXPECT_THAT(results.status().GetPayload(kMediaPipeTasksPayload),
+              Optional(absl::Cord(absl::StrCat(
+                  MediaPipeTasksStatus::kRunnerApiCalledInWrongModeError))));
+  MP_ASSERT_OK(segmenter->Close());
+}
+
+TEST_F(LiveStreamModeTest, FailsWithOutOfOrderInputTimestamps) {
+  MP_ASSERT_OK_AND_ASSIGN(Image image, DecodeImageFromFile(JoinPath(
+                                           "./", kTestDataDirectory,
+                                           "cats_and_dogs_no_resizing.jpg")));
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
+  options->running_mode = core::RunningMode::LIVE_STREAM;
+  options->result_callback =
+      [](absl::StatusOr<std::vector<Image>> segmented_masks, const Image& image,
+         int64 timestamp_ms) {};
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  MP_ASSERT_OK(segmenter->SegmentAsync(image, 1));
+
+  auto status = segmenter->SegmentAsync(image, 0);
+  EXPECT_EQ(status.code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(status.message(),
+              HasSubstr("timestamp must be monotonically increasing"));
+  EXPECT_THAT(status.GetPayload(kMediaPipeTasksPayload),
+              Optional(absl::Cord(absl::StrCat(
+                  MediaPipeTasksStatus::kRunnerInvalidTimestampError))));
+  MP_ASSERT_OK(segmenter->SegmentAsync(image, 2));
+  MP_ASSERT_OK(segmenter->Close());
+}
+
+TEST_F(LiveStreamModeTest, Succeeds) {
+  constexpr int iterations = 100;
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image,
+      DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
+                                   "segmentation_input_rotation0.jpg")));
+  std::vector<std::vector<Image>> segmented_masks_results;
+  std::vector<std::pair<int, int>> image_sizes;
+  std::vector<int64> timestamps;
+  auto options = std::make_unique<ImageSegmenterOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kDeeplabV3WithMetadata);
+  options->output_type = ImageSegmenterOptions::OutputType::CATEGORY_MASK;
+  options->running_mode = core::RunningMode::LIVE_STREAM;
+  options->result_callback =
+      [&segmented_masks_results, &image_sizes, &timestamps](
+          absl::StatusOr<std::vector<Image>> segmented_masks,
+          const Image& image, int64 timestamp_ms) {
+        MP_ASSERT_OK(segmented_masks.status());
+        segmented_masks_results.push_back(std::move(segmented_masks).value());
+        image_sizes.push_back({image.width(), image.height()});
+        timestamps.push_back(timestamp_ms);
+      };
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ImageSegmenter> segmenter,
+                          ImageSegmenter::Create(std::move(options)));
+  for (int i = 0; i < iterations; ++i) {
+    MP_ASSERT_OK(segmenter->SegmentAsync(image, i));
+  }
+  MP_ASSERT_OK(segmenter->Close());
+  // Due to the flow limiter, the total of outputs will be smaller than the
+  // number of iterations.
+  ASSERT_LE(segmented_masks_results.size(), iterations);
+  ASSERT_GT(segmented_masks_results.size(), 0);
+  cv::Mat expected_mask = cv::imread(
+      JoinPath("./", kTestDataDirectory, "segmentation_golden_rotation0.png"),
+      cv::IMREAD_GRAYSCALE);
+  for (const auto& segmented_masks : segmented_masks_results) {
+    EXPECT_EQ(segmented_masks.size(), 1);
+    cv::Mat actual_mask = mediapipe::formats::MatView(
+        segmented_masks[0].GetImageFrameSharedPtr().get());
+    EXPECT_THAT(actual_mask,
+                SimilarToUint8Mask(expected_mask, kGoldenMaskSimilarity,
+                                   kGoldenMaskMagnificationFactor));
+  }
+  for (const auto& image_size : image_sizes) {
+    EXPECT_EQ(image_size.first, image.width());
+    EXPECT_EQ(image_size.second, image.height());
+  }
+  int64 timestamp_ms = -1;
+  for (const auto& timestamp : timestamps) {
+    EXPECT_GT(timestamp, timestamp_ms);
+    timestamp_ms = timestamp;
+  }
+}
+
 // TODO: Add test for hair segmentation model.
 
 }  // namespace
+}  // namespace image_segmenter
 }  // namespace vision
 }  // namespace tasks
 }  // namespace mediapipe

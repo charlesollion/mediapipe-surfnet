@@ -150,7 +150,7 @@ cc_library(
     name = "executor_util",
     srcs = ["executor_util.cc"],
     hdrs = ["executor_util.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//visibility:public"],
     deps = [
         "//mediapipe/framework:calculator_cc_proto",
         "//mediapipe/framework:mediapipe_options_cc_proto",
@@ -819,6 +819,19 @@ cc_library(
         "@com_google_absl//absl/strings",
     ],
     alwayslink = 1,
+)
+
+mediapipe_cc_test(
+    name = "switch_demux_calculator_test",
+    srcs = ["switch_demux_calculator_test.cc"],
+    deps = [
+        ":container_util",
+        ":switch_demux_calculator",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:logging",
+        "@com_google_absl//absl/strings",
+    ],
 )
 
 cc_library(

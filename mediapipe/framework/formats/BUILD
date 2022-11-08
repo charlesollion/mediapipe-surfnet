@@ -293,7 +293,6 @@ mediapipe_proto_library(
     name = "rect_proto",
     srcs = ["rect.proto"],
     visibility = ["//visibility:public"],
-    deps = ["//mediapipe/framework/formats:location_data_proto"],
 )
 
 mediapipe_register_type(
@@ -332,13 +331,6 @@ mediapipe_register_type(
         "::std::vector<::mediapipe::NormalizedLandmarkList>",
     ],
     deps = [":landmark_cc_proto"],
-)
-
-# Expose the proto source files for building mediapipe AAR.
-filegroup(
-    name = "protos_src",
-    srcs = glob(["*.proto"]),
-    visibility = ["//mediapipe:__subpackages__"],
 )
 
 cc_library(
@@ -467,6 +459,10 @@ cc_library(
             "-x objective-c++",
             "-fobjc-arc",  # enable reference-counting
         ],
+        "//conditions:default": [],
+    }),
+    defines = select({
+        "//mediapipe/framework:android_no_jni": ["MEDIAPIPE_NO_JNI"],
         "//conditions:default": [],
     }),
     linkopts = select({

@@ -145,6 +145,7 @@ filegroup(
     srcs = [
         "testdata/anchor_golden_file_0.txt",
         "testdata/anchor_golden_file_1.txt",
+        "testdata/anchor_golden_file_2.txt",
     ],
 )
 
@@ -340,6 +341,7 @@ cc_library(
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework:packet",
         "//mediapipe/framework/port:ret_check",
+        "@com_google_absl//absl/status",
         "@org_tensorflow//tensorflow/lite:framework",
     ],
     alwayslink = 1,

@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "mediapipe/tasks/cc/vision/object_detector/object_detector.h"
 
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <string>
@@ -34,6 +35,8 @@ limitations under the License.
 #include "mediapipe/framework/port/gtest.h"
 #include "mediapipe/framework/port/parse_text_proto.h"
 #include "mediapipe/framework/port/status_matchers.h"
+#include "mediapipe/tasks/cc/components/containers/rect.h"
+#include "mediapipe/tasks/cc/vision/core/image_processing_options.h"
 #include "mediapipe/tasks/cc/vision/core/running_mode.h"
 #include "mediapipe/tasks/cc/vision/utils/image_utils.h"
 #include "tensorflow/lite/c/common.h"
@@ -62,14 +65,17 @@ namespace vision {
 namespace {
 
 using ::mediapipe::file::JoinPath;
+using ::mediapipe::tasks::components::containers::Rect;
+using ::mediapipe::tasks::vision::core::ImageProcessingOptions;
 using ::testing::HasSubstr;
 using ::testing::Optional;
 
 constexpr char kTestDataDirectory[] = "/mediapipe/tasks/testdata/vision/";
 constexpr char kMobileSsdWithMetadata[] =
     "coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.tflite";
-constexpr char kMobileSsdWithMetadataDummyScoreCalibration[] =
-    "coco_ssd_mobilenet_v1_1.0_quant_2018_06_29_score_calibration.tflite";
+constexpr char kMobileSsdWithDummyScoreCalibration[] =
+    "coco_ssd_mobilenet_v1_1.0_quant_2018_06_29_with_dummy_score_calibration."
+    "tflite";
 // The model has different output tensor order.
 constexpr char kEfficientDetWithMetadata[] =
     "coco_efficientdet_lite0_v1_1.0_quant_2021_09_06.tflite";
@@ -153,7 +159,7 @@ class CreateFromOptionsTest : public tflite_shims::testing::Test {};
 
 TEST_F(CreateFromOptionsTest, SucceedsWithSelectiveOpResolver) {
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->base_options.op_resolver =
       absl::make_unique<MobileSsdQuantizedOpResolver>();
@@ -185,7 +191,7 @@ class MobileSsdQuantizedOpResolverMissingOps
 
 TEST_F(CreateFromOptionsTest, FailsWithSelectiveOpResolverMissingOps) {
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->base_options.op_resolver =
       absl::make_unique<MobileSsdQuantizedOpResolverMissingOps>();
@@ -207,7 +213,7 @@ TEST_F(CreateFromOptionsTest, FailsWithMissingModel) {
   EXPECT_THAT(
       object_detector.status().message(),
       HasSubstr("ExternalFile must specify at least one of 'file_content', "
-                "'file_name' or 'file_descriptor_meta'."));
+                "'file_name', 'file_pointer_meta' or 'file_descriptor_meta'."));
   EXPECT_THAT(object_detector.status().GetPayload(kMediaPipeTasksPayload),
               Optional(absl::Cord(absl::StrCat(
                   MediaPipeTasksStatus::kRunnerInitializationError))));
@@ -215,7 +221,7 @@ TEST_F(CreateFromOptionsTest, FailsWithMissingModel) {
 
 TEST_F(CreateFromOptionsTest, FailsWithInvalidMaxResults) {
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->max_results = 0;
 
@@ -233,7 +239,7 @@ TEST_F(CreateFromOptionsTest, FailsWithInvalidMaxResults) {
 
 TEST_F(CreateFromOptionsTest, FailsWithCombinedAllowlistAndDenylist) {
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->category_allowlist.push_back("foo");
   options->category_denylist.push_back("bar");
@@ -253,7 +259,7 @@ TEST_F(CreateFromOptionsTest, FailsWithIllegalCallbackInImageOrVideoMode) {
   for (auto running_mode :
        {core::RunningMode::IMAGE, core::RunningMode::VIDEO}) {
     auto options = std::make_unique<ObjectDetectorOptions>();
-    options->base_options.model_file_name =
+    options->base_options.model_asset_path =
         JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
     options->running_mode = running_mode;
     options->result_callback =
@@ -274,7 +280,7 @@ TEST_F(CreateFromOptionsTest, FailsWithIllegalCallbackInImageOrVideoMode) {
 
 TEST_F(CreateFromOptionsTest, FailsWithMissingCallbackInLiveStreamMode) {
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->running_mode = core::RunningMode::LIVE_STREAM;
   absl::StatusOr<std::unique_ptr<ObjectDetector>> object_detector =
@@ -299,11 +305,11 @@ TEST_F(ImageModeTest, FailsWithCallingWrongMethod) {
                                            "./", kTestDataDirectory,
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
-  auto results = object_detector->Detect(image, 0);
+  auto results = object_detector->DetectForVideo(image, 0);
   EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_THAT(results.status().message(),
               HasSubstr("not initialized with the video mode"));
@@ -327,7 +333,7 @@ TEST_F(ImageModeTest, Succeeds) {
                                                        "cats_and_dogs.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 4;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -370,7 +376,7 @@ TEST_F(ImageModeTest, SucceedsEfficientDetModel) {
                                                        "cats_and_dogs.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 4;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kEfficientDetWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -413,7 +419,7 @@ TEST_F(ImageModeTest, SucceedsWithoutImageResizing) {
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 4;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -423,8 +429,27 @@ TEST_F(ImageModeTest, SucceedsWithoutImageResizing) {
       results, GenerateMobileSsdNoImageResizingFullExpectedResults());
 }
 
-// TODO: Add SucceedswithScoreCalibrations after score calibration
-// is implemented.
+TEST_F(ImageModeTest, SucceedsWithScoreCalibration) {
+  MP_ASSERT_OK_AND_ASSIGN(Image image, DecodeImageFromFile(JoinPath(
+                                           "./", kTestDataDirectory,
+                                           "cats_and_dogs_no_resizing.jpg")));
+  auto options = std::make_unique<ObjectDetectorOptions>();
+  options->max_results = 1;
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kMobileSsdWithDummyScoreCalibration);
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
+                          ObjectDetector::Create(std::move(options)));
+  MP_ASSERT_OK_AND_ASSIGN(auto results, object_detector->Detect(image));
+  MP_ASSERT_OK(object_detector->Close());
+  ExpectApproximatelyEqual(
+      results, {ParseTextProtoOrDie<Detection>(R"pb(
+        label: "cat"
+        score: 0.6531269142
+        location_data {
+          format: BOUNDING_BOX
+          bounding_box { xmin: 14 ymin: 197 width: 98 height: 99 }
+        })pb")});
+}
 
 TEST_F(ImageModeTest, SucceedsWithScoreThresholdOption) {
   MP_ASSERT_OK_AND_ASSIGN(Image image, DecodeImageFromFile(JoinPath(
@@ -432,7 +457,7 @@ TEST_F(ImageModeTest, SucceedsWithScoreThresholdOption) {
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->score_threshold = 0.5;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -451,7 +476,7 @@ TEST_F(ImageModeTest, SucceedsWithMaxResultsOption) {
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 2;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -470,7 +495,7 @@ TEST_F(ImageModeTest, SucceedsWithAllowlistOption) {
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 1;
   options->category_allowlist.push_back("dog");
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -488,7 +513,7 @@ TEST_F(ImageModeTest, SucceedsWithDenylistOption) {
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 1;
   options->category_denylist.push_back("cat");
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -499,6 +524,55 @@ TEST_F(ImageModeTest, SucceedsWithDenylistOption) {
   ExpectApproximatelyEqual(results, {full_expected_results[3]});
 }
 
+TEST_F(ImageModeTest, SucceedsWithRotation) {
+  MP_ASSERT_OK_AND_ASSIGN(
+      Image image, DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
+                                                "cats_and_dogs_rotated.jpg")));
+  auto options = std::make_unique<ObjectDetectorOptions>();
+  options->max_results = 1;
+  options->category_allowlist.push_back("cat");
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
+                          ObjectDetector::Create(std::move(options)));
+  ImageProcessingOptions image_processing_options;
+  image_processing_options.rotation_degrees = -90;
+  MP_ASSERT_OK_AND_ASSIGN(
+      auto results, object_detector->Detect(image, image_processing_options));
+  MP_ASSERT_OK(object_detector->Close());
+  ExpectApproximatelyEqual(
+      results, {ParseTextProtoOrDie<Detection>(R"pb(
+        label: "cat"
+        score: 0.7109375
+        location_data {
+          format: BOUNDING_BOX
+          bounding_box { xmin: 0 ymin: 622 width: 436 height: 276 }
+        })pb")});
+}
+
+TEST_F(ImageModeTest, FailsWithRegionOfInterest) {
+  MP_ASSERT_OK_AND_ASSIGN(Image image,
+                          DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
+                                                       "cats_and_dogs.jpg")));
+  auto options = std::make_unique<ObjectDetectorOptions>();
+  options->max_results = 1;
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
+                          ObjectDetector::Create(std::move(options)));
+  Rect roi{/*left=*/0.1, /*top=*/0, /*right=*/0.9, /*bottom=*/1};
+  ImageProcessingOptions image_processing_options{roi, /*rotation_degrees=*/0};
+
+  auto results = object_detector->Detect(image, image_processing_options);
+  EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
+  EXPECT_THAT(results.status().message(),
+              HasSubstr("This task doesn't support region-of-interest"));
+  EXPECT_THAT(
+      results.status().GetPayload(kMediaPipeTasksPayload),
+      Optional(absl::Cord(absl::StrCat(
+          MediaPipeTasksStatus::kImageProcessingInvalidArgumentError))));
+}
+
 class VideoModeTest : public tflite_shims::testing::Test {};
 
 TEST_F(VideoModeTest, FailsWithCallingWrongMethod) {
@@ -506,7 +580,7 @@ TEST_F(VideoModeTest, FailsWithCallingWrongMethod) {
                                            "./", kTestDataDirectory,
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->running_mode = core::RunningMode::VIDEO;
 
@@ -538,12 +612,13 @@ TEST_F(VideoModeTest, Succeeds) {
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 2;
   options->running_mode = core::RunningMode::VIDEO;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
   for (int i = 0; i < iterations; ++i) {
-    MP_ASSERT_OK_AND_ASSIGN(auto results, object_detector->Detect(image, i));
+    MP_ASSERT_OK_AND_ASSIGN(auto results,
+                            object_detector->DetectForVideo(image, i));
     std::vector<Detection> full_expected_results =
         GenerateMobileSsdNoImageResizingFullExpectedResults();
     ExpectApproximatelyEqual(
@@ -559,7 +634,7 @@ TEST_F(LiveStreamModeTest, FailsWithCallingWrongMethod) {
                                            "./", kTestDataDirectory,
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->running_mode = core::RunningMode::LIVE_STREAM;
   options->result_callback =
@@ -576,7 +651,7 @@ TEST_F(LiveStreamModeTest, FailsWithCallingWrongMethod) {
               Optional(absl::Cord(absl::StrCat(
                   MediaPipeTasksStatus::kRunnerApiCalledInWrongModeError))));
 
-  results = object_detector->Detect(image, 0);
+  results = object_detector->DetectForVideo(image, 0);
   EXPECT_EQ(results.status().code(), absl::StatusCode::kInvalidArgument);
   EXPECT_THAT(results.status().message(),
               HasSubstr("not initialized with the video mode"));
@@ -592,7 +667,7 @@ TEST_F(LiveStreamModeTest, FailsWithOutOfOrderInputTimestamps) {
                                            "cats_and_dogs_no_resizing.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->running_mode = core::RunningMode::LIVE_STREAM;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->result_callback =
       [](absl::StatusOr<std::vector<Detection>> detections, const Image& image,
@@ -623,7 +698,7 @@ TEST_F(LiveStreamModeTest, Succeeds) {
   std::vector<std::vector<Detection>> detection_results;
   std::vector<std::pair<int, int>> image_sizes;
   std::vector<int64> timestamps;
-  options->base_options.model_file_name =
+  options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->result_callback =
       [&detection_results, &image_sizes, &timestamps](

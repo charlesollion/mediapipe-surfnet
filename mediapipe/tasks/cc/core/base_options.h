@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 
 #include "absl/memory/memory.h"
+#include "mediapipe/tasks/cc/core/mediapipe_builtin_op_resolver.h"
 #include "mediapipe/tasks/cc/core/proto/base_options.pb.h"
 #include "tensorflow/lite/core/api/op_resolver.h"
 #include "tensorflow/lite/kernels/register.h"
@@ -30,11 +31,20 @@ namespace core {
 
 // Base options for MediaPipe C++ Tasks.
 struct BaseOptions {
-  // The model file contents as a string.
-  std::unique_ptr<std::string> model_file_contents;
+  // The model asset file contents as a string.
+  std::unique_ptr<std::string> model_asset_buffer;
 
-  // The path to the model file to open and mmap in memory.
-  std::string model_file_name = "";
+  // The path to the model asset to open and mmap in memory.
+  std::string model_asset_path = "";
+
+  // The delegate to run MediaPipe. If the delegate is not set, the default
+  // delegate CPU is used.
+  enum Delegate {
+    CPU = 0,
+    GPU = 1,
+  };
+
+  Delegate delegate = CPU;
 
   // The file descriptor to a file opened with open(2), with optional additional
   // offset and length information.
@@ -49,12 +59,12 @@ struct BaseOptions {
     // Optional starting offset in the file referred to by the file descriptor
     // `fd`.
     int offset = -1;
-  } model_file_descriptor_meta;
+  } model_asset_descriptor_meta;
 
   // A non-default OpResolver to support custom Ops or specify a subset of
   // built-in Ops.
   std::unique_ptr<tflite::OpResolver> op_resolver =
-      absl::make_unique<tflite::ops::builtin::BuiltinOpResolver>();
+      absl::make_unique<MediaPipeBuiltinOpResolver>();
 };
 
 // Converts a BaseOptions to a BaseOptionsProto.

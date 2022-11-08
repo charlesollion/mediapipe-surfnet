@@ -14,11 +14,13 @@ limitations under the License.
 ==============================================================================*/
 
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "mediapipe/calculators/core/split_vector_calculator.pb.h"
 #include "mediapipe/calculators/tensor/tensors_to_detections_calculator.pb.h"
 #include "mediapipe/calculators/util/detection_label_id_to_text_calculator.pb.h"
 #include "mediapipe/framework/api2/builder.h"
@@ -26,10 +28,16 @@ limitations under the License.
 #include "mediapipe/framework/calculator.pb.h"
 #include "mediapipe/framework/formats/detection.pb.h"
 #include "mediapipe/framework/formats/image.h"
+#include "mediapipe/framework/formats/rect.pb.h"
+#include "mediapipe/framework/formats/tensor.h"
 #include "mediapipe/tasks/cc/common.h"
+#include "mediapipe/tasks/cc/components/calculators/score_calibration_calculator.pb.h"
+#include "mediapipe/tasks/cc/components/calculators/score_calibration_utils.h"
 #include "mediapipe/tasks/cc/components/image_preprocessing.h"
+#include "mediapipe/tasks/cc/components/utils/source_or_node_output.h"
 #include "mediapipe/tasks/cc/core/model_resources.h"
 #include "mediapipe/tasks/cc/core/model_task_graph.h"
+#include "mediapipe/tasks/cc/core/proto/acceleration.pb.h"
 #include "mediapipe/tasks/cc/core/proto/inference_subgraph.pb.h"
 #include "mediapipe/tasks/cc/core/utils.h"
 #include "mediapipe/tasks/cc/metadata/metadata_extractor.h"
@@ -59,6 +67,8 @@ using ::tflite::TensorMetadata;
 using LabelItems = mediapipe::proto_ns::Map<int64, ::mediapipe::LabelMapItem>;
 using ObjectDetectorOptionsProto =
     object_detector::proto::ObjectDetectorOptions;
+using TensorsSource =
+    mediapipe::tasks::SourceOrNodeOutput<std::vector<mediapipe::Tensor>>;
 
 constexpr int kDefaultLocationsIndex = 0;
 constexpr int kDefaultCategoriesIndex = 1;
@@ -72,12 +82,16 @@ constexpr char kCategoryTensorName[] = "category";
 constexpr char kScoreTensorName[] = "score";
 constexpr char kNumberOfDetectionsTensorName[] = "number of detections";
 
+constexpr char kCalibratedScoresTag[] = "CALIBRATED_SCORES";
 constexpr char kDetectionsTag[] = "DETECTIONS";
-constexpr char kImageTag[] = "IMAGE";
 constexpr char kImageSizeTag[] = "IMAGE_SIZE";
+constexpr char kImageTag[] = "IMAGE";
+constexpr char kIndicesTag[] = "INDICES";
 constexpr char kMatrixTag[] = "MATRIX";
+constexpr char kNormRectTag[] = "NORM_RECT";
 constexpr char kPixelDetectionsTag[] = "PIXEL_DETECTIONS";
 constexpr char kProjectionMatrixTag[] = "PROJECTION_MATRIX";
+constexpr char kScoresTag[] = "SCORES";
 constexpr char kTensorTag[] = "TENSORS";
 
 // Struct holding the different output streams produced by the object detection
@@ -111,7 +125,8 @@ struct PostProcessingSpecs {
   absl::flat_hash_set<int> allow_or_deny_categories;
   // Indicates `allow_or_deny_categories` is an allowlist or a denylist.
   bool is_allowlist;
-  // TODO: Adds score calibration.
+  // Score calibration options, if any.
+  std::optional<ScoreCalibrationCalculatorOptions> score_calibration_options;
 };
 
 absl::Status SanityCheckOptions(const ObjectDetectorOptionsProto& options) {
@@ -265,6 +280,43 @@ absl::StatusOr<absl::flat_hash_set<int>> GetAllowOrDenyCategoryIndicesIfAny(
   return category_indices;
 }
 
+absl::StatusOr<std::optional<ScoreCalibrationCalculatorOptions>>
+GetScoreCalibrationOptionsIfAny(
+    const ModelMetadataExtractor& metadata_extractor,
+    const TensorMetadata& tensor_metadata) {
+  // Get ScoreCalibrationOptions, if any.
+  ASSIGN_OR_RETURN(
+      const ProcessUnit* score_calibration_process_unit,
+      metadata_extractor.FindFirstProcessUnit(
+          tensor_metadata, tflite::ProcessUnitOptions_ScoreCalibrationOptions));
+  if (score_calibration_process_unit == nullptr) {
+    return std::nullopt;
+  }
+  auto* score_calibration_options =
+      score_calibration_process_unit->options_as_ScoreCalibrationOptions();
+  // Get corresponding AssociatedFile.
+  auto score_calibration_filename =
+      metadata_extractor.FindFirstAssociatedFileName(
+          tensor_metadata,
+          tflite::AssociatedFileType_TENSOR_AXIS_SCORE_CALIBRATION);
+  if (score_calibration_filename.empty()) {
+    return CreateStatusWithPayload(
+        absl::StatusCode::kNotFound,
+        "Found ScoreCalibrationOptions but missing required associated "
+        "parameters file with type TENSOR_AXIS_SCORE_CALIBRATION.",
+        MediaPipeTasksStatus::kMetadataAssociatedFileNotFoundError);
+  }
+  ASSIGN_OR_RETURN(
+      absl::string_view score_calibration_file,
+      metadata_extractor.GetAssociatedFile(score_calibration_filename));
+  ScoreCalibrationCalculatorOptions score_calibration_calculator_options;
+  MP_RETURN_IF_ERROR(ConfigureScoreCalibration(
+      score_calibration_options->score_transformation(),
+      score_calibration_options->default_score(), score_calibration_file,
+      &score_calibration_calculator_options));
+  return score_calibration_calculator_options;
+}
+
 std::vector<int> GetOutputTensorIndices(
     const flatbuffers::Vector<flatbuffers::Offset<TensorMetadata>>*
         tensor_metadatas) {
@@ -353,6 +405,12 @@ absl::StatusOr<PostProcessingSpecs> BuildPostProcessingSpecs(
                                        *output_tensors_metadata->Get(
                                            specs.output_tensor_indices[2])));
   }
+  // Builds score calibration options (if available) from metadata.
+  ASSIGN_OR_RETURN(
+      specs.score_calibration_options,
+      GetScoreCalibrationOptionsIfAny(
+          *metadata_extractor,
+          *output_tensors_metadata->Get(specs.output_tensor_indices[2])));
   return specs;
 }
 
@@ -401,12 +459,18 @@ void ConfigureTensorsToDetectionsCalculator(
 // Inputs:
 //   IMAGE - Image
 //     Image to perform detection on.
+//   NORM_RECT - NormalizedRect @Optional
+//     Describes image rotation and region of image to perform detection
+//     on.
+//     @Optional: rect covering the whole image is used if not specified.
 //
 // Outputs:
 //   DETECTIONS - std::vector<Detection>
 //     Detected objects with bounding box in pixel units.
 //   IMAGE - mediapipe::Image
 //     The image that object detection runs on.
+// All returned coordinates are in the unrotated and uncropped input image
+// coordinates system.
 //
 // Example:
 // node {
@@ -417,6 +481,11 @@ void ConfigureTensorsToDetectionsCalculator(
 //   options {
 //     [mediapipe.tasks.vision.object_detector.proto.ObjectDetectorOptions.ext]
 //     {
+//       base_options {
+//         model_asset {
+//           file_name: "/path/to/model.tflite"
+//         }
+//       }
 //       max_results: 4
 //       score_threshold: 0.5
 //       category_allowlist: "foo"
@@ -433,9 +502,10 @@ class ObjectDetectorGraph : public core::ModelTaskGraph {
     Graph graph;
     ASSIGN_OR_RETURN(
         auto output_streams,
-        BuildObjectDetectionTask(sc->Options<ObjectDetectorOptionsProto>(),
-                                 *model_resources,
-                                 graph[Input<Image>(kImageTag)], graph));
+        BuildObjectDetectionTask(
+            sc->Options<ObjectDetectorOptionsProto>(), *model_resources,
+            graph[Input<Image>(kImageTag)],
+            graph[Input<NormalizedRect>::Optional(kNormRectTag)], graph));
     output_streams.detections >>
         graph[Output<std::vector<Detection>>(kDetectionsTag)];
     output_streams.image >> graph[Output<Image>(kImageTag)];
@@ -458,10 +528,27 @@ class ObjectDetectorGraph : public core::ModelTaskGraph {
   absl::StatusOr<ObjectDetectionOutputStreams> BuildObjectDetectionTask(
       const ObjectDetectorOptionsProto& task_options,
       const core::ModelResources& model_resources, Source<Image> image_in,
-      Graph& graph) {
+      Source<NormalizedRect> norm_rect_in, Graph& graph) {
     MP_RETURN_IF_ERROR(SanityCheckOptions(task_options));
-    auto metadata_extractor = model_resources.GetMetadataExtractor();
+    // Checks that the model has 4 outputs.
+    auto& model = *model_resources.GetTfLiteModel();
+    if (model.subgraphs()->size() != 1 ||
+        (*model.subgraphs())[0]->outputs()->size() != 4) {
+      return CreateStatusWithPayload(
+          absl::StatusCode::kInvalidArgument,
+          absl::StrFormat("Expected a model with a single subgraph, found %d.",
+                          model.subgraphs()->size()),
+          MediaPipeTasksStatus::kInvalidArgumentError);
+    }
+    if (model.subgraphs()->Get(0)->outputs()->size() != 4) {
+      return CreateStatusWithPayload(
+          absl::StatusCode::kInvalidArgument,
+          absl::StrFormat("Expected a model with 4 output tensors, found %d.",
+                          model.subgraphs()->Get(0)->outputs()->size()),
+          MediaPipeTasksStatus::kInvalidArgumentError);
+    }
     // Checks that metadata is available.
+    auto* metadata_extractor = model_resources.GetMetadataExtractor();
     if (metadata_extractor->GetModelMetadata() == nullptr ||
         metadata_extractor->GetModelMetadata()->subgraph_metadata() ==
             nullptr) {
@@ -475,21 +562,68 @@ class ObjectDetectorGraph : public core::ModelTaskGraph {
     // Adds preprocessing calculators and connects them to the graph input image
     // stream.
     auto& preprocessing =
-        graph.AddNode("mediapipe.tasks.ImagePreprocessingSubgraph");
+        graph.AddNode("mediapipe.tasks.components.ImagePreprocessingSubgraph");
+    bool use_gpu = components::DetermineImagePreprocessingGpuBackend(
+        task_options.base_options().acceleration());
     MP_RETURN_IF_ERROR(ConfigureImagePreprocessing(
-        model_resources,
-        &preprocessing.GetOptions<ImagePreprocessingOptions>()));
+        model_resources, use_gpu,
+        &preprocessing
+             .GetOptions<tasks::components::ImagePreprocessingOptions>()));
     image_in >> preprocessing.In(kImageTag);
+    norm_rect_in >> preprocessing.In(kNormRectTag);
 
     // Adds inference subgraph and connects its input stream to the output
     // tensors produced by the ImageToTensorCalculator.
-    auto& inference = AddInference(model_resources, graph);
+    auto& inference = AddInference(
+        model_resources, task_options.base_options().acceleration(), graph);
     preprocessing.Out(kTensorTag) >> inference.In(kTensorTag);
 
     // Adds post processing calculators.
     ASSIGN_OR_RETURN(
         auto post_processing_specs,
         BuildPostProcessingSpecs(task_options, metadata_extractor));
+    // Calculators to perform score calibration, if specified in the metadata.
+    TensorsSource calibrated_tensors = {&inference, kTensorTag};
+    if (post_processing_specs.score_calibration_options.has_value()) {
+      // Split tensors.
+      auto* split_tensor_vector_node =
+          &graph.AddNode("SplitTensorVectorCalculator");
+      auto& split_tensor_vector_options =
+          split_tensor_vector_node
+              ->GetOptions<mediapipe::SplitVectorCalculatorOptions>();
+      for (int i = 0; i < 4; ++i) {
+        auto* range = split_tensor_vector_options.add_ranges();
+        range->set_begin(i);
+        range->set_end(i + 1);
+      }
+      calibrated_tensors >> split_tensor_vector_node->In(0);
+
+      // Add score calibration calculator.
+      auto* score_calibration_node =
+          &graph.AddNode("ScoreCalibrationCalculator");
+      score_calibration_node->GetOptions<ScoreCalibrationCalculatorOptions>()
+          .CopyFrom(*post_processing_specs.score_calibration_options);
+      split_tensor_vector_node->Out(
+          post_processing_specs.output_tensor_indices[1]) >>
+          score_calibration_node->In(kIndicesTag);
+      split_tensor_vector_node->Out(
+          post_processing_specs.output_tensor_indices[2]) >>
+          score_calibration_node->In(kScoresTag);
+
+      // Re-concatenate tensors.
+      auto* concatenate_tensor_vector_node =
+          &graph.AddNode("ConcatenateTensorVectorCalculator");
+      for (int i = 0; i < 4; ++i) {
+        if (i == post_processing_specs.output_tensor_indices[2]) {
+          score_calibration_node->Out(kCalibratedScoresTag) >>
+              concatenate_tensor_vector_node->In(i);
+        } else {
+          split_tensor_vector_node->Out(i) >>
+              concatenate_tensor_vector_node->In(i);
+        }
+      }
+      calibrated_tensors = {concatenate_tensor_vector_node, 0};
+    }
     // Calculator to convert output tensors to a detection proto vector.
     // Connects TensorsToDetectionsCalculator's input stream to the output
     // tensors produced by the inference subgraph.
@@ -499,7 +633,7 @@ class ObjectDetectorGraph : public core::ModelTaskGraph {
         post_processing_specs,
         &tensors_to_detections
              .GetOptions<mediapipe::TensorsToDetectionsCalculatorOptions>());
-    inference.Out(kTensorTag) >> tensors_to_detections.In(kTensorTag);
+    calibrated_tensors >> tensors_to_detections.In(kTensorTag);
 
     // Calculator to projects detections back to the original coordinate system.
     auto& detection_projection = graph.AddNode("DetectionProjectionCalculator");
