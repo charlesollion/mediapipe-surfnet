@@ -2,6 +2,14 @@
 # Used in the examples in
 # mediapipe/examples/desktop/object_detection:object_detection_cpu.
 
+profiler_config: {
+  trace_enabled: true
+  enable_profiler: true
+  trace_log_interval_count: 200
+  trace_log_path: "/tmp/mediapipe/"
+}
+
+
 # Images on CPU coming into and out of the graph.
 input_stream: "input_video"
 output_stream: "output_video"
@@ -35,7 +43,7 @@ node {
 # entire transformed image. As a result, image aspect ratio may be changed and
 # objects in the image may be deformed (stretched or squeezed), but the object
 # detection model used in this graph is agnostic to that deformation.
-node: {
+node {
   calculator: "ImageTransformationCalculator"
   input_stream: "IMAGE:throttled_input_video"
   output_stream: "IMAGE:transformed_input_video"
@@ -49,10 +57,16 @@ node: {
 
 # Converts the transformed input image on CPU into an image tensor stored as a
 # TfLiteTensor.
+# Adding int8 tensors, remove if needed
 node {
   calculator: "TfLiteConverterCalculator"
   input_stream: "IMAGE:transformed_input_video"
   output_stream: "TENSORS:image_tensor"
+  #options: {
+  #  [mediapipe.TfLiteConverterCalculatorOptions.ext] {
+  #    use_quantized_tensors: true
+  #  }
+  #}
 }
 
 # Runs a TensorFlow Lite model on CPU that takes an image tensor and outputs a
@@ -62,8 +76,11 @@ node {
   input_stream: "TENSORS:image_tensor"
   output_stream: "TENSORS:detection_tensors"
   node_options: {
-    [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      model_path: "mediapipe/surfnet/models/yolov5s-fp16.tflite"
+     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
+      #model_path: "mediapipe/surfnet/models/yolov5s-int8.tflite"
+      model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
+      #model_path: "mediapipe/surfnet/models/yolov7-tiny-optim.tflite"
+      
     }
   }
 }
@@ -77,7 +94,7 @@ node {
       num_coords: 85
       max_detections: 100
       num_boxes: 25200
-      min_conf_thresh: 0.1
+      min_conf_thresh: 0.08
       flip_vertically: false
       reverse_output_order: true
     }

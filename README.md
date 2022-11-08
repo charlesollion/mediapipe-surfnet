@@ -30,7 +30,20 @@ sudo apt-get install openjdk-11-jdk
 Based on [Basel](https://bazel.build/), the first build will be long as it builds the whole mediapipe framework, subsequent builds will be mostly cached.
 
 ```sh
+bazel build -c opt --define MEDIAPIPE_DISABLE_GPU=1 mediapipe/surfnet/desktop:surfnet
+bazel build -c opt --config=android_arm64 --define MEDIAPIPE_PROFILING=1 --linkopt="-s" mediapipe/surfnet/android/src/java/com/google/mediapipe/apps/surfnetmobile:surfnetmobile
+```
+
+```mkdir /tmp/mediapipe```
+
+```sh
+export GLOG_logtostderr=1
+./bazel-bin/mediapipe/surfnet/desktop/surfnet --calculator_graph_config_file=mediapipe/surfnet/graphs/surfnet.pbtxt
+``` 
+
+```
 export GLOG_logtostderr=1
 bazel run --define MEDIAPIPE_DISABLE_GPU=1 \
 mediapipe/examples/desktop/hello_world:hello_world
 ```
+

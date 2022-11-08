@@ -36,4 +36,7 @@ message TfLiteYoloTensorsToDummyCalculatorOptions {
   optional bool flip_vertically = 5 [default = false];
   // invert x and y output
   optional bool reverse_output_order = 6 [default = false];
+
+  // optional bool dequantized_model = 7 [default = false];
+
 }

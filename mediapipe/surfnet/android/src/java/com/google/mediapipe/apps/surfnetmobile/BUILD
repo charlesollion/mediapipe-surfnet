@@ -37,7 +37,8 @@ android_binary(
     srcs = glob(["*.java"]),
     assets = [
         "//mediapipe/surfnet/graphs:mobile_surfnet_cpu.binarypb",
-        "//mediapipe/surfnet/models:yolov5s-fp16.tflite",
+        #"//mediapipe/surfnet/models:yolov5s-fp16.tflite",
+        "//mediapipe/surfnet/models:yolov7-tiny-optim.tflite",
         "//mediapipe/surfnet/models:labelmap_yolo.txt",
     ],
     assets_dir = "",
@@ -48,6 +49,34 @@ android_binary(
         "mainActivity": "com.google.mediapipe.apps.basic.MainActivity",
         "cameraFacingFront": "False",
         "binaryGraphName": "mobile_surfnet_cpu.binarypb",
+        "inputVideoStreamName": "input_video",
+        "outputVideoStreamName": "output_video",
+        "flipFramesVertically": "True",
+        "converterNumBuffers": "2",
+    },
+    multidex = "native",
+    deps = [
+        ":mediapipe_jni_lib",
+        "//mediapipe/examples/android/src/java/com/google/mediapipe/apps/basic:basic_lib",
+    ],
+)
+
+android_binary(
+    name = "surfnetmobilegpu",
+    srcs = glob(["*.java"]),
+    assets = [
+        "//mediapipe/surfnet/graphs:mobile_surfnet_gpu.binarypb",
+        "//mediapipe/surfnet/models:yolov5s-fp16.tflite",
+        "//mediapipe/surfnet/models:labelmap_yolo.txt",
+    ],
+    assets_dir = "",
+    manifest = "//mediapipe/examples/android/src/java/com/google/mediapipe/apps/basic:AndroidManifest.xml",
+    manifest_values = {
+        "applicationId": "com.google.mediapipe.apps.surfnetmobile",
+        "appName": "Surfnet",
+        "mainActivity": "com.google.mediapipe.apps.basic.MainActivity",
+        "cameraFacingFront": "False",
+        "binaryGraphName": "mobile_surfnet_gpu.binarypb",
         "inputVideoStreamName": "input_video",
         "outputVideoStreamName": "output_video",
         "flipFramesVertically": "True",

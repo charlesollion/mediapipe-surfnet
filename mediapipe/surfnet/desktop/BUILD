@@ -17,7 +17,7 @@ licenses(["notice"])
 package(default_visibility = ["//mediapipe/surfnet:__subpackages__"])
 
 cc_binary(
-    name = "surfnet",
+    name = "example_surfnet",
     srcs = ["surfnet.cc"],
     visibility = ["//visibility:public"],
     deps = [
@@ -48,15 +48,13 @@ cc_library(
 )
 
 cc_binary(
-    name = "surfnet3",
+    name = "surfnet",
     data = [
-        "//mediapipe/surfnet/models:yolov5s-fp16.tflite",
-        # "//mediapipe/surfnet/models:ssdlite_object_detection.tflite",
-        # "//mediapipe/surfnet/models:ssdlite_object_detection_labelmap.txt",
+        "//mediapipe/surfnet/models:yolo_21062022-int8.tflite",
+        "//mediapipe/surfnet/models:labelmap_yolo.txt",
     ],
     deps = [
         ":run_graph_main",
-        # "//mediapipe/graphs/tracking:desktop_calculators",
         "//mediapipe/surfnet/graphs:desktop_tflite_calculators",
     ],
 )

@@ -92,8 +92,8 @@ mediapipe_binary_graph(
 )
 
 mediapipe_binary_graph(
-    name = "mobile_gpu_binary_graph",
-    graph = "object_detection_mobile_gpu.pbtxt",
-    output_name = "mobile_gpu.binarypb",
+    name = "mobile_surfnet_gpu_binary_graph",
+    graph = "mobile_surfnet_gpu.pbtxt",
+    output_name = "mobile_surfnet_gpu.binarypb",
     deps = [":mobile_calculators"],
 )
