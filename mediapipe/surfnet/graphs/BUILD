@@ -24,18 +24,43 @@ cc_library(
         "//mediapipe/calculators/image:image_transformation_calculator",
         "//mediapipe/calculators/tflite:ssd_anchors_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
-        "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        # "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
         "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
         "//mediapipe/calculators/util:detection_letterbox_removal_calculator",
         "//mediapipe/calculators/util:detections_to_render_data_calculator",
         "//mediapipe/calculators/util:non_max_suppression_calculator",
-        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_dummy_calculator",
+        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_detections_calculator",
         "//mediapipe/gpu:gpu_buffer_to_image_frame_calculator",
         "//mediapipe/gpu:image_frame_to_gpu_buffer_calculator",
     ],
 )
+
+# This is the one used for gpu android
+cc_library(
+    name = "mobile_gpu_calculators",
+    deps = [
+        "//mediapipe/calculators/core:flow_limiter_calculator",
+        "//mediapipe/calculators/image:image_transformation_calculator",
+        "//mediapipe/calculators/tflite:ssd_anchors_calculator",
+        "//mediapipe/calculators/tflite:tflite_converter_calculator",
+        "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        # "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
+        "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
+        "//mediapipe/calculators/util:annotation_overlay_calculator",
+        "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
+        "//mediapipe/calculators/util:detection_letterbox_removal_calculator",
+        "//mediapipe/calculators/util:detections_to_render_data_calculator",
+        "//mediapipe/calculators/util:non_max_suppression_calculator",
+        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_detections_calculator",
+        "//mediapipe/calculators/core:pass_through_calculator",
+        "//mediapipe/gpu:gpu_buffer_to_image_frame_calculator",
+        "//mediapipe/gpu:image_frame_to_gpu_buffer_calculator",
+    ],
+)
+
 
 cc_library(
     name = "desktop_tensorflow_calculators",
@@ -66,7 +91,8 @@ cc_library(
         "//mediapipe/calculators/image:image_transformation_calculator",
         "//mediapipe/calculators/tflite:ssd_anchors_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
-        "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        # "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
         "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
@@ -74,7 +100,8 @@ cc_library(
         "//mediapipe/calculators/util:non_max_suppression_calculator",
         "//mediapipe/calculators/video:opencv_video_decoder_calculator",
         "//mediapipe/calculators/video:opencv_video_encoder_calculator",
-        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_dummy_calculator",
+        "//mediapipe/calculators/core:pass_through_calculator",
+        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_detections_calculator",
     ],
 )
 
@@ -92,8 +119,15 @@ mediapipe_binary_graph(
 )
 
 mediapipe_binary_graph(
+    name = "mobile_surfnet_cpu_binary_graph_simplified",
+    graph = "mobile_surfnet_simplified.pbtxt",
+    output_name = "mobile_surfnet_cpu_simplified.binarypb",
+    deps = [":mobile_calculators"],
+)
+
+mediapipe_binary_graph(
     name = "mobile_surfnet_gpu_binary_graph",
     graph = "mobile_surfnet_gpu.pbtxt",
     output_name = "mobile_surfnet_gpu.binarypb",
-    deps = [":mobile_calculators"],
+    deps = [":mobile_gpu_calculators"],
 )

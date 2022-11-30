@@ -81,8 +81,8 @@ mediapipe_proto_library(
 )
 
 mediapipe_proto_library(
-    name = "tflite_yolo_tensors_to_dummy_calculator_proto",
-    srcs = ["tflite_yolo_tensors_to_dummy_calculator.proto"],
+    name = "tflite_yolo_tensors_to_detections_calculator_proto",
+    srcs = ["tflite_yolo_tensors_to_detections_calculator.proto"],
     visibility = ["//visibility:public"],
     deps = [
         "//mediapipe/framework:calculator_options_proto",
@@ -452,8 +452,8 @@ cc_library(
 )
 
 cc_library(
-    name = "tflite_yolo_tensors_to_dummy_calculator",
-    srcs = ["tflite_yolo_tensors_to_dummy_calculator.cc"],
+    name = "tflite_yolo_tensors_to_detections_calculator",
+    srcs = ["tflite_yolo_tensors_to_detections_calculator.cc"],
     copts = select({
         "//mediapipe:ios": [
             "-x objective-c++",
@@ -471,7 +471,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//mediapipe/util/tflite:config",
-        ":tflite_yolo_tensors_to_dummy_calculator_cc_proto",
+        ":tflite_yolo_tensors_to_detections_calculator_cc_proto",
         "//mediapipe/framework/formats:detection_cc_proto",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",

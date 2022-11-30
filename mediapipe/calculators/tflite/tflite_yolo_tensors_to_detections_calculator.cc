@@ -17,7 +17,7 @@
 
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
-#include "mediapipe/calculators/tflite/tflite_yolo_tensors_to_dummy_calculator.pb.h"
+#include "mediapipe/calculators/tflite/tflite_yolo_tensors_to_detections_calculator.pb.h"
 #include "mediapipe/framework/calculator_framework.h"
 #include "mediapipe/framework/deps/file_path.h"
 #include "mediapipe/framework/formats/detection.pb.h"
@@ -82,40 +82,8 @@ struct GPUData {
 
 // Convert result TFLite tensors from object detection models into MediaPipe
 // Detections.
-//
-// Input:
-//  TENSORS - Vector of TfLiteTensor of type kTfLiteFloat32. The vector of
-//               tensors can have 2 or 3 tensors. First tensor is the predicted
-//               raw boxes/keypoints. The size of the values must be (num_boxes
-//               * num_predicted_values). Second tensor is the score tensor. The
-//               size of the valuse must be (num_boxes * num_classes). It's
-//               optional to pass in a third tensor for anchors (e.g. for SSD
-//               models) depend on the outputs of the detection model. The size
-//               of anchor tensor must be (num_boxes * 4).
-//  TENSORS_GPU - vector of GlBuffer of MTLBuffer.
-// Output:
-//  DETECTIONS - Result MediaPipe detections.
-//
-// Usage example:
-// node {
-//   calculator: "TfLiteTensorsToDetectionsCalculator"
-//   input_stream: "TENSORS:tensors"
-//   input_side_packet: "ANCHORS:anchors"
-//   output_stream: "DETECTIONS:detections"
-//   options: {
-//     [mediapipe.TfLiteTensorsToDetectionsCalculatorOptions.ext] {
-//       num_classes: 91
-//       num_boxes: 1917
-//       num_coords: 4
-//       ignore_classes: [0, 1, 2]
-//       x_scale: 10.0
-//       y_scale: 10.0
-//       h_scale: 5.0
-//       w_scale: 5.0
-//     }
-//   }
-// }
-class TfLiteYoloTensorsToDummyCalculator : public CalculatorBase {
+
+class TfLiteYoloTensorsToDetectionsCalculator : public CalculatorBase {
  public:
   static absl::Status GetContract(CalculatorContract* cc);
 
@@ -137,7 +105,7 @@ class TfLiteYoloTensorsToDummyCalculator : public CalculatorBase {
                                float box_xmax, float score, int class_id,
                                bool flip_vertically);
 
-  ::mediapipe::TfLiteYoloTensorsToDummyCalculatorOptions options_;
+  ::mediapipe::TfLiteYoloTensorsToDetectionsCalculatorOptions options_;
   int max_detections_ = 100;
   int num_boxes_ = 25200;
   int num_coords_ = 85;
@@ -154,9 +122,9 @@ class TfLiteYoloTensorsToDummyCalculator : public CalculatorBase {
 
   bool gpu_input_ = false;
 };
-REGISTER_CALCULATOR(TfLiteYoloTensorsToDummyCalculator);
+REGISTER_CALCULATOR(TfLiteYoloTensorsToDetectionsCalculator);
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::GetContract(
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::GetContract(
     CalculatorContract* cc) {
   RET_CHECK(!cc->Inputs().GetTags().empty());
   RET_CHECK(!cc->Outputs().GetTags().empty());
@@ -187,7 +155,7 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::GetContract(
   return absl::OkStatus();
 }
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::Open(CalculatorContext* cc) {
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::Open(CalculatorContext* cc) {
   cc->SetOffset(TimestampDiff(0));
 
   if (cc->Inputs().HasTag(kTensorsGpuTag)) {
@@ -205,7 +173,7 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::Open(CalculatorContext* cc) {
   return absl::OkStatus();
 }
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::Process(
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::Process(
     CalculatorContext* cc) {
   if ((!gpu_input_ && cc->Inputs().Tag(kTensorsTag).IsEmpty()) ||
       (gpu_input_ && cc->Inputs().Tag(kTensorsGpuTag).IsEmpty())) {
@@ -247,7 +215,7 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::Process(
   return absl::OkStatus();
 }
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::DecodeTensor(const float* raw_tensor,
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::DecodeTensor(const float* raw_tensor,
     std::vector<float>* boxes, std::vector<float>* scores, 
     std::vector<int>* classes) {
     
@@ -328,7 +296,7 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::DecodeTensor(const float* raw_t
 }
 
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::ConvertToDetections(
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::ConvertToDetections(
     const float* detection_boxes, const float* detection_scores,
     const int* detection_classes, int num_boxes, std::vector<Detection>* output_detections) {
     for (int i = 0; i < num_boxes; ++i) {
@@ -350,7 +318,7 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::ConvertToDetections(
   return absl::OkStatus();
 }
 
-Detection TfLiteYoloTensorsToDummyCalculator::ConvertToDetection(
+Detection TfLiteYoloTensorsToDetectionsCalculator::ConvertToDetection(
     float box_ymin, float box_xmin, float box_ymax, float box_xmax, float score,
     int class_id, bool flip_vertically) {
   Detection detection;
@@ -370,7 +338,7 @@ Detection TfLiteYoloTensorsToDummyCalculator::ConvertToDetection(
   return detection;
 }
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::Close(CalculatorContext* cc) {
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::Close(CalculatorContext* cc) {
 #if MEDIAPIPE_TFLITE_GL_INFERENCE
   gpu_helper_.RunInGlContext([this] { gpu_data_.reset(); });
 #elif MEDIAPIPE_TFLITE_METAL_INFERENCE
@@ -380,11 +348,11 @@ absl::Status TfLiteYoloTensorsToDummyCalculator::Close(CalculatorContext* cc) {
   return absl::OkStatus();
 }
 
-absl::Status TfLiteYoloTensorsToDummyCalculator::LoadOptions(
+absl::Status TfLiteYoloTensorsToDetectionsCalculator::LoadOptions(
     CalculatorContext* cc) {
   // Get calculator options specified in the graph.
   options_ =
-      cc->Options<::mediapipe::TfLiteYoloTensorsToDummyCalculatorOptions>();
+      cc->Options<::mediapipe::TfLiteYoloTensorsToDetectionsCalculatorOptions>();
   
   num_coords_ = options_.num_coords();
   max_detections_ = options_.max_detections();

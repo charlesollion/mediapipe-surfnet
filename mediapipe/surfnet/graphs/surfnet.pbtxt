@@ -71,19 +71,27 @@ node {
 
 # Runs a TensorFlow Lite model on CPU that takes an image tensor and outputs a
 # new tensor to be interpreted
+# tflite_inference_test_calculator
+
 node {
-  calculator: "TfLiteInferenceCalculator"
+  calculator: "TfLiteTestInferenceCalculator"
   input_stream: "TENSORS:image_tensor"
   output_stream: "TENSORS:detection_tensors"
-  node_options: {
-     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      #model_path: "mediapipe/surfnet/models/yolov5s-int8.tflite"
-      model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
-      #model_path: "mediapipe/surfnet/models/yolov7-tiny-optim.tflite"
-      
-    }
-  }
 }
+
+# node {
+#   calculator: "TfLiteInferenceCalculator"
+#   input_stream: "TENSORS:image_tensor"
+#   output_stream: "TENSORS:detection_tensors"
+#   node_options: {
+#      [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
+#       #model_path: "mediapipe/surfnet/models/yolov5s-int8.tflite"
+#       model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
+#       #model_path: "mediapipe/surfnet/models/yolov7-tiny-optim.tflite"
+      
+#     }
+#   }
+# }
 
 node {
   calculator: "TfLiteYoloTensorsToDummyCalculator"

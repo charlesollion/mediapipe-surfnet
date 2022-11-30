@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The option proto for the TfLiteYoloTensorsToDummyCalculator.
+// The option proto for the TfLiteYoloTensorsToDetectionsCalculator.
 
 syntax = "proto2";
 
@@ -20,9 +20,9 @@ package mediapipe;
 
 import "mediapipe/framework/calculator.proto";
 
-message TfLiteYoloTensorsToDummyCalculatorOptions {
+message TfLiteYoloTensorsToDetectionsCalculatorOptions {
   extend .mediapipe.CalculatorOptions {
-    optional TfLiteYoloTensorsToDummyCalculatorOptions ext = 246514967;
+    optional TfLiteYoloTensorsToDetectionsCalculatorOptions ext = 246514967;
   }
   // The number of output coords predicted by the detection model (5 + number of classes)
   optional int32 num_coords = 1 [default = 85];  // required

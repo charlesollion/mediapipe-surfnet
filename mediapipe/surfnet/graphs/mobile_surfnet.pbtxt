@@ -75,29 +75,36 @@ node {
 
 # Runs a TensorFlow Lite model on CPU that takes an image tensor and outputs a
 # new tensor to be interpreted
-node {
-  calculator: "TfLiteInferenceCalculator"
-  input_stream: "TENSORS:image_tensor"
-  output_stream: "TENSORS:detection_tensors"
-  node_options: {
-    [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      #model_path: "mediapipe/surfnet/models/yolov5s-fp16.tflite"
-      model_path: "mediapipe/surfnet/models/yolov7-tiny-optim.tflite"
-      delegate: { 
-        xnnpack { 
-          num_threads: -1 
-        } 
-      }
-    }
-  }
-}
+# node {
+#   calculator: "TfLiteInferenceCalculator"
+#   input_stream: "TENSORS:image_tensor"
+#   output_stream: "TENSORS:detection_tensors"
+#   node_options: {
+#     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
+#       model_path: "mediapipe/surfnet/models/yolov5s-fp16.tflite"
+#       #model_path: "mediapipe/surfnet/models/yolov7-tiny-optim.tflite"
+#       delegate: { 
+#         xnnpack { 
+#           num_threads: -1
+#         } 
+#       }
+#     }
+#   }
+# }
 
 node {
-  calculator: "TfLiteYoloTensorsToDummyCalculator"
+  calculator: "TfLiteTestInferenceCalculator"
+  input_stream: "TENSORS:image_tensor"
+  output_stream: "TENSORS:detection_tensors"
+}
+
+
+node {
+  calculator: "TfLiteYoloTensorsToDetectionsCalculator"
   input_stream: "TENSORS:detection_tensors"
   output_stream: "DETECTIONS:detections"
   node_options: {
-    [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDummyCalculatorOptions] {
+    [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
       num_coords: 85
       max_detections: 100
       num_boxes: 25200
