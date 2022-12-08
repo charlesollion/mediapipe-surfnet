@@ -46,7 +46,8 @@ node {
   output_stream: "TENSORS:detection_tensors"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      model_path: "mediapipe/surfnet/models/yolov5s-fp16.tflite"
+      model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
+      # "mediapipe/surfnet/models/yolov5s-fp16.tflite"
       delegate: { 
         gpu { 
           use_advanced_gpu_api: true

@@ -8,10 +8,9 @@ This is a work in progress repository, the final repository will be different.
 
 Follow instructions from [MediaPipe Github repository](https://github.com/google/mediapipe)
 
-Be careful to update correctly the opencv
-```sh
-third_party/opencv_linux.BUILD
-```
+Be careful to update correctly the setup opencv script
+```libdc1394-22-dev ``` to ```libdc1394-dev```
+
 #### Android
 
 Add to `.bashrc`
@@ -19,6 +18,8 @@ Add to `.bashrc`
 export ANDROID_HOME=$HOME/Android/Sdk
 export ANDROID_NDK_HOME=$HOME/Android/Sdk/ndk/21.4.7075529
 ```
+
+You need the android version 33, and the build tools 30.0.3 (nothing above). Installing them via Android Studio is the simplest.
 
 ```sh
 source ~/.bashrc

@@ -1,0 +1,335 @@
+# MediaPipe graph that performs object detection and tracking with TensorFlow
+# Lite on GPU.
+# Used in the examples in
+# mediapipie/examples/android/src/java/com/mediapipe/apps/objecttrackinggpu
+
+
+profiler_config {
+  trace_enabled: true
+  enable_profiler: true
+  trace_log_interval_count: 50
+  trace_log_path: "/mnt/sdcard/"
+}
+
+
+# Images on GPU coming into and out of the graph.
+input_stream: "input_video"
+output_stream: "output_video"
+
+# Resamples the images by specific frame rate. This calculator is used to
+# control the frequecy of subsequent calculators/subgraphs, e.g. less power
+# consumption for expensive process.
+# node {
+#   calculator: "PacketResamplerCalculator"
+#   input_stream: "DATA:input_video"
+#   output_stream: "DATA:throttled_input_video"
+#   node_options: {
+#     [type.googleapis.com/mediapipe.PacketResamplerCalculatorOptions] {
+#       frame_rate: 1.0
+#     }
+#   }
+# }
+
+node {
+  calculator: "FlowLimiterCalculator"
+  input_stream: "input_video"
+  input_stream: "FINISHED:detections"
+  input_stream_info: {
+    tag_index: "FINISHED"
+    back_edge: true
+  }
+  output_stream: "throttled_input_video"
+}
+
+
+# Transforms the input image on 640x640 image.
+node {
+  calculator: "ImageTransformationCalculator"
+  input_stream: "IMAGE_GPU:throttled_input_video"
+  output_stream: "IMAGE_GPU:scaled_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
+      output_width: 640
+      output_height: 640
+    }
+  }
+}
+
+node {
+  calculator: "TfLiteConverterCalculator"
+  input_stream: "IMAGE_GPU:scaled_video"
+  output_stream: "TENSORS_GPU:image_tensor"
+}
+
+node {
+  calculator: "TfLiteInferenceCalculator"
+  input_stream: "TENSORS_GPU:image_tensor"
+  output_stream: "TENSORS:detection_tensors"
+  node_options: {
+    [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
+      model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
+      # "mediapipe/surfnet/models/yolov5s-fp16.tflite"
+      delegate: { 
+        gpu { 
+          use_advanced_gpu_api: true
+          allow_precision_loss: true
+        }
+        # tflite {}
+      }
+    }
+  }
+}
+
+node {
+  calculator: "TfLiteYoloTensorsToDetectionsCalculator"
+  input_stream: "TENSORS:detection_tensors"
+  output_stream: "DETECTIONS:detections"
+  node_options: {
+    [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
+      num_coords: 85
+      max_detections: 100
+      num_boxes: 25200
+      min_conf_thresh: 0.1
+      flip_vertically: false
+      reverse_output_order: true
+    }
+  }
+}
+
+# Performs non-max suppression to remove excessive detections.
+node {
+  calculator: "NonMaxSuppressionCalculator"
+  input_stream: "detections"
+  output_stream: "filtered_detections"
+  node_options: {
+    [type.googleapis.com/mediapipe.NonMaxSuppressionCalculatorOptions] {
+      min_suppression_threshold: 0.4
+      max_num_detections: 3
+      overlap_type: INTERSECTION_OVER_UNION
+      return_empty_detections: true
+    }
+  }
+}
+
+# Maps detection label IDs to the corresponding label text. The label map is
+# provided in the label_map_path option.
+node {
+  calculator: "DetectionLabelIdToTextCalculator"
+  input_stream: "filtered_detections"
+  output_stream: "named_detections"
+  node_options: {
+    [type.googleapis.com/mediapipe.DetectionLabelIdToTextCalculatorOptions] {
+      label_map_path: "mediapipe/surfnet/models/labelmap_yolo.txt"
+    }
+  }
+}
+
+node {
+  calculator: "DetectionUniqueIdCalculator"
+  input_stream: "DETECTIONS:named_detections"
+  output_stream: "DETECTIONS:detections_with_id"
+}
+
+# Converts detections to TimedBox protos which are used as initial location
+# for tracking.
+node {
+  calculator: "DetectionsToTimedBoxListCalculator"
+  input_stream: "DETECTIONS:detections_with_id"
+  output_stream: "BOXES:start_pos"
+}
+
+node: {
+  calculator: "ImageTransformationCalculator"
+  input_stream: "IMAGE_GPU:input_video"
+  output_stream: "IMAGE_GPU:downscaled_input_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
+      output_width: 240
+      output_height: 320
+      # output_width: 640
+      # output_height: 640
+    }
+  }
+}
+
+# Converts GPU buffer to ImageFrame for processing tracking.
+node: {
+  calculator: "GpuBufferToImageFrameCalculator"
+  input_stream: "downscaled_input_video"
+  output_stream: "downscaled_input_video_cpu"
+}
+
+# Performs motion analysis on an incoming video stream.
+node: {
+  calculator: "MotionAnalysisCalculator"
+  input_stream: "VIDEO:downscaled_input_video_cpu"
+  output_stream: "CAMERA:camera_motion"
+  output_stream: "FLOW:region_flow"
+
+  node_options: {
+    [type.googleapis.com/mediapipe.MotionAnalysisCalculatorOptions]: {
+      analysis_options {
+        analysis_policy: ANALYSIS_POLICY_CAMERA_MOBILE
+        flow_options {
+          fast_estimation_min_block_size: 100
+          top_inlier_sets: 1
+          frac_inlier_error_threshold: 3e-3
+          downsample_mode: DOWNSAMPLE_TO_INPUT_SIZE
+          verification_distance: 5.0
+          verify_long_feature_acceleration: true
+          verify_long_feature_trigger_ratio: 0.1
+          tracking_options {
+            max_features: 500
+            adaptive_extraction_levels: 2
+            min_eig_val_settings {
+              adaptive_lowest_quality_level: 2e-4
+            }
+            klt_tracker_implementation: KLT_OPENCV
+          }
+        }
+      }
+    }
+  }
+}
+
+# Reads optical flow fields defined in
+# mediapipe/framework/formats/motion/optical_flow_field.h,
+# returns a VideoFrame with 2 channels (v_x and v_y), each channel is quantized
+# to 0-255.
+node: {
+  calculator: "FlowPackagerCalculator"
+  input_stream: "FLOW:region_flow"
+  input_stream: "CAMERA:camera_motion"
+  output_stream: "TRACKING:tracking_data"
+
+  node_options: {
+    [type.googleapis.com/mediapipe.FlowPackagerCalculatorOptions]: {
+      flow_packager_options: {
+        binary_tracking_data_support: false
+      }
+    }
+  }
+}
+
+# Tracks box positions over time.
+node: {
+  calculator: "BoxTrackerCalculator"
+  input_stream: "TRACKING:tracking_data"
+  input_stream: "TRACK_TIME:input_video"
+  input_stream: "START_POS:start_pos"
+  input_stream: "CANCEL_OBJECT_ID:cancel_object_id"
+  input_stream_info: {
+    tag_index: "CANCEL_OBJECT_ID"
+    back_edge: true
+  }
+  output_stream: "BOXES:boxes"
+
+  input_stream_handler {
+    input_stream_handler: "SyncSetInputStreamHandler"
+    options {
+      [mediapipe.SyncSetInputStreamHandlerOptions.ext] {
+        sync_set {
+          tag_index: "TRACKING"
+          tag_index: "TRACK_TIME"
+        }
+        sync_set {
+          tag_index: "START_POS"
+        }
+        sync_set {
+          tag_index: "CANCEL_OBJECT_ID"
+        }
+      }
+    }
+  }
+
+  node_options: {
+    [type.googleapis.com/mediapipe.BoxTrackerCalculatorOptions]: {
+      tracker_options: {
+        track_step_options {
+          track_object_and_camera: true
+          tracking_degrees: TRACKING_DEGREE_OBJECT_SCALE
+          inlier_spring_force: 0.0
+          static_motion_temporal_ratio: 3e-2
+        }
+      }
+      visualize_tracking_data: false
+      streaming_track_data_cache_size: 100
+    }
+  }
+}
+
+
+# Managers new detected objects and objects that are being tracked.
+# It associates the duplicated detections and updates the locations of
+# detections from tracking.
+node: {
+  calculator: "TrackedDetectionManagerCalculator"
+  input_stream: "DETECTIONS:detections_with_id"
+  input_stream: "TRACKING_BOXES:boxes"
+  output_stream: "DETECTIONS:tracked_detections"
+  output_stream: "CANCEL_OBJECT_ID:cancel_object_id"
+
+  input_stream_handler {
+    input_stream_handler: "SyncSetInputStreamHandler"
+    options {
+      [mediapipe.SyncSetInputStreamHandlerOptions.ext] {
+        sync_set {
+          tag_index: "TRACKING_BOXES"
+        }
+        sync_set {
+          tag_index: "DETECTIONS"
+        }
+      }
+    }
+  }
+}
+
+
+
+# Converts the detections to drawing primitives for annotation overlay.
+node {
+  calculator: "DetectionsToRenderDataCalculator"
+  input_stream: "DETECTIONS:tracked_detections"
+  output_stream: "RENDER_DATA:render_data"
+  node_options: {
+    [type.googleapis.com/mediapipe.DetectionsToRenderDataCalculatorOptions] {
+      thickness: 4.0
+      color { r: 255 g: 0 b: 0 }
+      render_detection_id: true
+    }
+  }
+}
+
+# Draws annotations and overlays them on top of the input images.
+node {
+  calculator: "AnnotationOverlayCalculator"
+  input_stream: "IMAGE_GPU:throttled_input_video"
+  input_stream: "render_data"
+  output_stream: "IMAGE_GPU:output_video"
+}
+
+# Subgraph that detections objects (see object_detection_gpu.pbtxt).
+# node {
+#   calculator: "YoloGpu"
+#   # calculator: "ObjectDetectionSubgraphGpu"
+#   input_stream: "IMAGE:throttled_input_video"
+#   output_stream: "DETECTIONS:output_detections"
+# }
+
+# # Subgraph that tracks objects (see object_tracking_gpu.pbtxt).
+# #node {
+# #  calculator: "ObjectTrackingSubgraphGpu"
+# #  input_stream: "VIDEO:input_video"
+# #  input_stream: "DETECTIONS:output_detections"
+# #  output_stream: "DETECTIONS:tracked_detections"
+# #}
+
+# # Subgraph that renders annotations and overlays them on top of the input
+# # images (see renderer_gpu.pbtxt).
+# node {
+#   calculator: "RendererSubgraphGpu"
+#   input_stream: "IMAGE:input_video"
+#   # input_stream: "DETECTIONS:tracked_detections"
+#   input_stream: "DETECTIONS:output_detections"
+#   output_stream: "IMAGE:output_video"
+# }
