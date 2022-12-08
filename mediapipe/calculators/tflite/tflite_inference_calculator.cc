@@ -485,9 +485,9 @@ absl::Status TfLiteInferenceCalculator::WriteKernelsToFile() {
 #if MEDIAPIPE_TFLITE_GL_INFERENCE && defined(MEDIAPIPE_ANDROID)
   if (use_kernel_caching_) {
     // Save kernel file.
-    auto kernel_cache = absl::make_unique<std::vector<uint8_t>>(
-        tflite_gpu_runner_->GetSerializedBinaryCache());
-    std::string cache_str(kernel_cache->begin(), kernel_cache->end());
+    ASSIGN_OR_RETURN(std::vector<uint8_t> kernel_cache,
+                     tflite_gpu_runner_->GetSerializedBinaryCache());
+    std::string cache_str(kernel_cache.begin(), kernel_cache.end());
     MP_RETURN_IF_ERROR(
         mediapipe::file::SetContents(cached_kernel_filename_, cache_str));
   }
@@ -941,6 +941,8 @@ absl::Status TfLiteInferenceCalculator::LoadDelegate(CalculatorContext* cc) {
     if (use_xnnpack) {
       auto xnnpack_opts = TfLiteXNNPackDelegateOptionsDefault();
       xnnpack_opts.num_threads = GetXnnpackNumThreads(calculator_opts);
+      // TODO Remove once XNNPACK is enabled by default.
+      xnnpack_opts.flags |= TFLITE_XNNPACK_DELEGATE_FLAG_QU8;
       delegate_ = TfLiteDelegatePtr(TfLiteXNNPackDelegateCreate(&xnnpack_opts),
                                     &TfLiteXNNPackDelegateDelete);
       RET_CHECK_EQ(interpreter_->ModifyGraphWithDelegate(delegate_.get()),

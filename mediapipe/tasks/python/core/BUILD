@@ -14,7 +14,7 @@
 
 # Placeholder for internal Python strict library and test compatibility macro.
 
-package(default_visibility = ["//mediapipe/tasks:internal"])
+package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
 
@@ -31,6 +31,7 @@ py_library(
 py_library(
     name = "base_options",
     srcs = ["base_options.py"],
+    visibility = ["//mediapipe/tasks:users"],
     deps = [
         ":optional_dependencies",
         "//mediapipe/tasks/cc/core/proto:base_options_py_pb2",

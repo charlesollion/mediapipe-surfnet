@@ -14,27 +14,88 @@
  * limitations under the License.
  */
 
+import {BaseOptions as BaseOptionsProto} from '../../../tasks/cc/core/proto/base_options_pb';
+import {convertBaseOptionsToProto} from '../../../tasks/web/components/processors/base_options';
+import {TaskRunnerOptions} from '../../../tasks/web/core/task_runner_options';
+import {createMediaPipeLib, FileLocator, GraphRunner, WasmMediaPipeConstructor, WasmModule} from '../../../web/graph_runner/graph_runner';
+import {SupportImage} from '../../../web/graph_runner/graph_runner_image_lib';
 import {SupportModelResourcesGraphService} from '../../../web/graph_runner/register_model_resources_graph_service';
-import {SupportImage} from '../../../web/graph_runner/wasm_mediapipe_image_lib';
-import {WasmMediaPipeLib, WasmModule} from '../../../web/graph_runner/wasm_mediapipe_lib';
+
+import {WasmFileset} from './wasm_fileset';
+
+// None of the MP Tasks ship bundle assets.
+const NO_ASSETS = undefined;
 
 // tslint:disable-next-line:enforce-name-casing
-const WasmMediaPipeImageLib =
-    SupportModelResourcesGraphService(SupportImage(WasmMediaPipeLib));
+const GraphRunnerImageLibType =
+    SupportModelResourcesGraphService(SupportImage(GraphRunner));
+/** An implementation of the GraphRunner that supports image operations */
+export class GraphRunnerImageLib extends GraphRunnerImageLibType {}
+
+/**
+ * Creates a new instance of a Mediapipe Task. Determines if SIMD is
+ * supported and loads the relevant WASM binary.
+ * @return A fully instantiated instance of `T`.
+ */
+export async function createTaskRunner<T extends TaskRunner>(
+    type: WasmMediaPipeConstructor<T>, initializeCanvas: boolean,
+    fileset: WasmFileset, options: TaskRunnerOptions): Promise<T> {
+  const fileLocator: FileLocator = {
+    locateFile() {
+      // The only file loaded with this mechanism is the Wasm binary
+      return fileset.wasmBinaryPath.toString();
+    }
+  };
+
+  // Initialize a canvas if requested. If OffscreenCanvas is availble, we
+  // let the graph runner initialize it by passing `undefined`.
+  const canvas = initializeCanvas ? (typeof OffscreenCanvas === 'undefined' ?
+                                         document.createElement('canvas') :
+                                         undefined) :
+                                    null;
+  const instance = await createMediaPipeLib(
+      type, fileset.wasmLoaderPath, NO_ASSETS, canvas, fileLocator);
+  await instance.setOptions(options);
+  return instance;
+}
 
 /** Base class for all MediaPipe Tasks. */
-export abstract class TaskRunner extends WasmMediaPipeImageLib {
+export abstract class TaskRunner {
+  protected abstract baseOptions: BaseOptionsProto;
+  protected graphRunner: GraphRunnerImageLib;
   private processingErrors: Error[] = [];
 
-  constructor(wasmModule: WasmModule) {
-    super(wasmModule);
+  /**
+   * Creates a new instance of a Mediapipe Task. Determines if SIMD is
+   * supported and loads the relevant WASM binary.
+   * @return A fully instantiated instance of `T`.
+   */
+  protected static async createInstance<T extends TaskRunner>(
+      type: WasmMediaPipeConstructor<T>, initializeCanvas: boolean,
+      fileset: WasmFileset, options: TaskRunnerOptions): Promise<T> {
+    return createTaskRunner(type, initializeCanvas, fileset, options);
+  }
+
+  constructor(
+      wasmModule: WasmModule, glCanvas?: HTMLCanvasElement|OffscreenCanvas|null,
+      graphRunner?: GraphRunnerImageLib) {
+    this.graphRunner =
+        graphRunner ?? new GraphRunnerImageLib(wasmModule, glCanvas);
 
     // Disables the automatic render-to-screen code, which allows for pure
     // CPU processing.
-    this.setAutoRenderToScreen(false);
+    this.graphRunner.setAutoRenderToScreen(false);
 
     // Enables use of our model resource caching graph service.
-    this.registerModelResourcesGraphService();
+    this.graphRunner.registerModelResourcesGraphService();
+  }
+
+  /** Configures the shared options of a MediaPipe Task. */
+  async setOptions(options: TaskRunnerOptions): Promise<void> {
+    if (options.baseOptions) {
+      this.baseOptions = await convertBaseOptionsToProto(
+          options.baseOptions, this.baseOptions);
+    }
   }
 
   /**
@@ -47,11 +108,11 @@ export abstract class TaskRunner extends WasmMediaPipeImageLib {
    * @param isBinary This should be set to true if the graph is in
    *     binary format, and false if it is in human-readable text format.
    */
-  override setGraph(graphData: Uint8Array, isBinary: boolean): void {
-    this.attachErrorListener((code, message) => {
+  protected setGraph(graphData: Uint8Array, isBinary: boolean): void {
+    this.graphRunner.attachErrorListener((code, message) => {
       this.processingErrors.push(new Error(message));
     });
-    super.setGraph(graphData, isBinary);
+    this.graphRunner.setGraph(graphData, isBinary);
     this.handleErrors();
   }
 
@@ -60,8 +121,8 @@ export abstract class TaskRunner extends WasmMediaPipeImageLib {
    * far as possible, performing all processing until no more processing can be
    * done.
    */
-  override finishProcessing(): void {
-    super.finishProcessing();
+  protected finishProcessing(): void {
+    this.graphRunner.finishProcessing();
     this.handleErrors();
   }
 

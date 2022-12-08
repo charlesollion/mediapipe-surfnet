@@ -59,7 +59,7 @@ _GESTURE_DEFAULT_INDEX = -1
 
 
 @dataclasses.dataclass
-class GestureRecognitionResult:
+class GestureRecognizerResult:
   """The gesture recognition result from GestureRecognizer, where each vector element represents a single hand detected in the image.
 
   Attributes:
@@ -79,8 +79,8 @@ class GestureRecognitionResult:
 
 def _build_recognition_result(
     output_packets: Mapping[str,
-                            packet_module.Packet]) -> GestureRecognitionResult:
-  """Consturcts a `GestureRecognitionResult` from output packets."""
+                            packet_module.Packet]) -> GestureRecognizerResult:
+  """Constructs a `GestureRecognizerResult` from output packets."""
   gestures_proto_list = packet_getter.get_proto_list(
       output_packets[_HAND_GESTURE_STREAM_NAME])
   handedness_proto_list = packet_getter.get_proto_list(
@@ -122,23 +122,25 @@ def _build_recognition_result(
   for proto in hand_landmarks_proto_list:
     hand_landmarks = landmark_pb2.NormalizedLandmarkList()
     hand_landmarks.MergeFrom(proto)
-    hand_landmarks_results.append([
-        landmark_module.NormalizedLandmark.create_from_pb2(hand_landmark)
-        for hand_landmark in hand_landmarks.landmark
-    ])
+    hand_landmarks_list = []
+    for hand_landmark in hand_landmarks.landmark:
+      hand_landmarks_list.append(
+          landmark_module.NormalizedLandmark.create_from_pb2(hand_landmark))
+    hand_landmarks_results.append(hand_landmarks_list)
 
   hand_world_landmarks_results = []
   for proto in hand_world_landmarks_proto_list:
     hand_world_landmarks = landmark_pb2.LandmarkList()
     hand_world_landmarks.MergeFrom(proto)
-    hand_world_landmarks_results.append([
-        landmark_module.Landmark.create_from_pb2(hand_world_landmark)
-        for hand_world_landmark in hand_world_landmarks.landmark
-    ])
+    hand_world_landmarks_list = []
+    for hand_world_landmark in hand_world_landmarks.landmark:
+      hand_world_landmarks_list.append(
+          landmark_module.Landmark.create_from_pb2(hand_world_landmark))
+    hand_world_landmarks_results.append(hand_world_landmarks_list)
 
-  return GestureRecognitionResult(gesture_results, handedness_results,
-                                  hand_landmarks_results,
-                                  hand_world_landmarks_results)
+  return GestureRecognizerResult(gesture_results, handedness_results,
+                                 hand_landmarks_results,
+                                 hand_world_landmarks_results)
 
 
 @dataclasses.dataclass
@@ -179,11 +181,13 @@ class GestureRecognizerOptions:
   min_hand_presence_confidence: Optional[float] = 0.5
   min_tracking_confidence: Optional[float] = 0.5
   canned_gesture_classifier_options: Optional[
-      _ClassifierOptions] = _ClassifierOptions()
+      _ClassifierOptions] = dataclasses.field(
+          default_factory=_ClassifierOptions)
   custom_gesture_classifier_options: Optional[
-      _ClassifierOptions] = _ClassifierOptions()
+      _ClassifierOptions] = dataclasses.field(
+          default_factory=_ClassifierOptions)
   result_callback: Optional[Callable[
-      [GestureRecognitionResult, image_module.Image, int], None]] = None
+      [GestureRecognizerResult, image_module.Image, int], None]] = None
 
   @doc_controls.do_not_generate_docs
   def to_pb2(self) -> _GestureRecognizerGraphOptionsProto:
@@ -264,13 +268,13 @@ class GestureRecognizer(base_vision_task_api.BaseVisionTaskApi):
       if output_packets[_HAND_GESTURE_STREAM_NAME].is_empty():
         empty_packet = output_packets[_HAND_GESTURE_STREAM_NAME]
         options.result_callback(
-            GestureRecognitionResult([], [], [], []), image,
+            GestureRecognizerResult([], [], [], []), image,
             empty_packet.timestamp.value // _MICRO_SECONDS_PER_MILLISECOND)
         return
 
-      gesture_recognition_result = _build_recognition_result(output_packets)
+      gesture_recognizer_result = _build_recognition_result(output_packets)
       timestamp = output_packets[_HAND_GESTURE_STREAM_NAME].timestamp
-      options.result_callback(gesture_recognition_result, image,
+      options.result_callback(gesture_recognizer_result, image,
                               timestamp.value // _MICRO_SECONDS_PER_MILLISECOND)
 
     task_info = _TaskInfo(
@@ -299,7 +303,7 @@ class GestureRecognizer(base_vision_task_api.BaseVisionTaskApi):
       self,
       image: image_module.Image,
       image_processing_options: Optional[_ImageProcessingOptions] = None
-  ) -> GestureRecognitionResult:
+  ) -> GestureRecognizerResult:
     """Performs hand gesture recognition on the given image.
 
     Only use this method when the GestureRecognizer is created with the image
@@ -330,7 +334,7 @@ class GestureRecognizer(base_vision_task_api.BaseVisionTaskApi):
     })
 
     if output_packets[_HAND_GESTURE_STREAM_NAME].is_empty():
-      return GestureRecognitionResult([], [], [], [])
+      return GestureRecognizerResult([], [], [], [])
 
     return _build_recognition_result(output_packets)
 
@@ -339,7 +343,7 @@ class GestureRecognizer(base_vision_task_api.BaseVisionTaskApi):
       image: image_module.Image,
       timestamp_ms: int,
       image_processing_options: Optional[_ImageProcessingOptions] = None
-  ) -> GestureRecognitionResult:
+  ) -> GestureRecognizerResult:
     """Performs gesture recognition on the provided video frame.
 
     Only use this method when the GestureRecognizer is created with the video
@@ -374,7 +378,7 @@ class GestureRecognizer(base_vision_task_api.BaseVisionTaskApi):
     })
 
     if output_packets[_HAND_GESTURE_STREAM_NAME].is_empty():
-      return GestureRecognitionResult([], [], [], [])
+      return GestureRecognizerResult([], [], [], [])
 
     return _build_recognition_result(output_packets)
 

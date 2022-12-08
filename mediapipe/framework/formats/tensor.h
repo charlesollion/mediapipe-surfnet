@@ -39,10 +39,9 @@
 #endif  // MEDIAPIPE_NO_JNI
 
 #ifdef MEDIAPIPE_TENSOR_USE_AHWB
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <android/hardware_buffer.h>
-
-#include "third_party/GL/gl/include/EGL/egl.h"
-#include "third_party/GL/gl/include/EGL/eglext.h"
 #endif  // MEDIAPIPE_TENSOR_USE_AHWB
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_30
 #include "mediapipe/gpu/gl_base.h"
@@ -384,9 +383,9 @@ class Tensor {
   mutable void* cpu_buffer_ = nullptr;
   void AllocateCpuBuffer() const;
 #if MEDIAPIPE_METAL_ENABLED
-  mutable id<MTLCommandBuffer> command_buffer_;
-  mutable id<MTLDevice> device_;
-  mutable id<MTLBuffer> metal_buffer_;
+  mutable id<MTLCommandBuffer> command_buffer_ = nil;
+  mutable id<MTLDevice> device_ = nil;
+  mutable id<MTLBuffer> metal_buffer_ = nil;
   void AllocateMtlBuffer(id<MTLDevice> device) const;
 #endif  // MEDIAPIPE_METAL_ENABLED
 
@@ -419,6 +418,7 @@ class Tensor {
   void ReleaseAhwbStuff();
   void* MapAhwbToCpuRead() const;
   void* MapAhwbToCpuWrite() const;
+  void MoveCpuOrSsboToAhwb() const;
 
 #if MEDIAPIPE_OPENGL_ES_VERSION >= MEDIAPIPE_OPENGL_ES_30
   mutable std::shared_ptr<mediapipe::GlContext> gl_context_;

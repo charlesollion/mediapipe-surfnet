@@ -27,10 +27,24 @@ py_test(
     ],
     deps = [
         "//mediapipe/tasks/python/components/containers:category",
-        "//mediapipe/tasks/python/components/containers:classifications",
-        "//mediapipe/tasks/python/components/processors:classifier_options",
+        "//mediapipe/tasks/python/components/containers:classification_result",
         "//mediapipe/tasks/python/core:base_options",
         "//mediapipe/tasks/python/test:test_utils",
         "//mediapipe/tasks/python/text:text_classifier",
+    ],
+)
+
+py_test(
+    name = "text_embedder_test",
+    srcs = ["text_embedder_test.py"],
+    data = [
+        "//mediapipe/tasks/testdata/text:mobilebert_embedding_model",
+        "//mediapipe/tasks/testdata/text:regex_embedding_with_metadata",
+    ],
+    deps = [
+        "//mediapipe/tasks/python/components/containers:embedding_result",
+        "//mediapipe/tasks/python/core:base_options",
+        "//mediapipe/tasks/python/test:test_utils",
+        "//mediapipe/tasks/python/text:text_embedder",
     ],
 )

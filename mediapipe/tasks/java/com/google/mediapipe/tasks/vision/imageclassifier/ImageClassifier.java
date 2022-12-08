@@ -25,8 +25,9 @@ import com.google.mediapipe.framework.PacketGetter;
 import com.google.mediapipe.framework.ProtoUtil;
 import com.google.mediapipe.framework.image.BitmapImageBuilder;
 import com.google.mediapipe.framework.image.MPImage;
+import com.google.mediapipe.tasks.components.containers.ClassificationResult;
 import com.google.mediapipe.tasks.components.containers.proto.ClassificationsProto;
-import com.google.mediapipe.tasks.components.processors.ClassifierOptions;
+import com.google.mediapipe.tasks.components.processors.proto.ClassifierOptionsProto;
 import com.google.mediapipe.tasks.core.BaseOptions;
 import com.google.mediapipe.tasks.core.ErrorListener;
 import com.google.mediapipe.tasks.core.OutputHandler;
@@ -96,8 +97,8 @@ public final class ImageClassifier extends BaseVisionTaskApi {
           Arrays.asList("IMAGE:" + IMAGE_IN_STREAM_NAME, "NORM_RECT:" + NORM_RECT_IN_STREAM_NAME));
   private static final List<String> OUTPUT_STREAMS =
       Collections.unmodifiableList(
-          Arrays.asList("CLASSIFICATION_RESULT:classification_result_out", "IMAGE:image_out"));
-  private static final int CLASSIFICATION_RESULT_OUT_STREAM_INDEX = 0;
+          Arrays.asList("CLASSIFICATIONS:classifications_out", "IMAGE:image_out"));
+  private static final int CLASSIFICATIONS_OUT_STREAM_INDEX = 0;
   private static final int IMAGE_OUT_STREAM_INDEX = 1;
   private static final String TASK_GRAPH_NAME =
       "mediapipe.tasks.vision.image_classifier.ImageClassifierGraph";
@@ -164,17 +165,19 @@ public final class ImageClassifier extends BaseVisionTaskApi {
    * @throws MediaPipeException if there is an error during {@link ImageClassifier} creation.
    */
   public static ImageClassifier createFromOptions(Context context, ImageClassifierOptions options) {
-    OutputHandler<ImageClassificationResult, MPImage> handler = new OutputHandler<>();
+    OutputHandler<ImageClassifierResult, MPImage> handler = new OutputHandler<>();
     handler.setOutputPacketConverter(
-        new OutputHandler.OutputPacketConverter<ImageClassificationResult, MPImage>() {
+        new OutputHandler.OutputPacketConverter<ImageClassifierResult, MPImage>() {
           @Override
-          public ImageClassificationResult convertToTaskResult(List<Packet> packets) {
+          public ImageClassifierResult convertToTaskResult(List<Packet> packets) {
             try {
-              return ImageClassificationResult.create(
-                  PacketGetter.getProto(
-                      packets.get(CLASSIFICATION_RESULT_OUT_STREAM_INDEX),
-                      ClassificationsProto.ClassificationResult.getDefaultInstance()),
-                  packets.get(CLASSIFICATION_RESULT_OUT_STREAM_INDEX).getTimestamp());
+              return ImageClassifierResult.create(
+                  ClassificationResult.createFromProto(
+                      PacketGetter.getProto(
+                          packets.get(CLASSIFICATIONS_OUT_STREAM_INDEX),
+                          ClassificationsProto.ClassificationResult.getDefaultInstance())),
+                  BaseVisionTaskApi.generateResultTimestampMs(
+                      options.runningMode(), packets.get(CLASSIFICATIONS_OUT_STREAM_INDEX)));
             } catch (IOException e) {
               throw new MediaPipeException(
                   MediaPipeException.StatusCode.INTERNAL.ordinal(), e.getMessage());
@@ -229,7 +232,7 @@ public final class ImageClassifier extends BaseVisionTaskApi {
    * @param image a MediaPipe {@link MPImage} object for processing.
    * @throws MediaPipeException if there is an internal error.
    */
-  public ImageClassificationResult classify(MPImage image) {
+  public ImageClassifierResult classify(MPImage image) {
     return classify(image, ImageProcessingOptions.builder().build());
   }
 
@@ -248,9 +251,9 @@ public final class ImageClassifier extends BaseVisionTaskApi {
    *     input image before running inference.
    * @throws MediaPipeException if there is an internal error.
    */
-  public ImageClassificationResult classify(
+  public ImageClassifierResult classify(
       MPImage image, ImageProcessingOptions imageProcessingOptions) {
-    return (ImageClassificationResult) processImageData(image, imageProcessingOptions);
+    return (ImageClassifierResult) processImageData(image, imageProcessingOptions);
   }
 
   /**
@@ -271,7 +274,7 @@ public final class ImageClassifier extends BaseVisionTaskApi {
    * @param timestampMs the input timestamp (in milliseconds).
    * @throws MediaPipeException if there is an internal error.
    */
-  public ImageClassificationResult classifyForVideo(MPImage image, long timestampMs) {
+  public ImageClassifierResult classifyForVideo(MPImage image, long timestampMs) {
     return classifyForVideo(image, ImageProcessingOptions.builder().build(), timestampMs);
   }
 
@@ -294,9 +297,9 @@ public final class ImageClassifier extends BaseVisionTaskApi {
    * @param timestampMs the input timestamp (in milliseconds).
    * @throws MediaPipeException if there is an internal error.
    */
-  public ImageClassificationResult classifyForVideo(
+  public ImageClassifierResult classifyForVideo(
       MPImage image, ImageProcessingOptions imageProcessingOptions, long timestampMs) {
-    return (ImageClassificationResult) processVideoData(image, imageProcessingOptions, timestampMs);
+    return (ImageClassifierResult) processVideoData(image, imageProcessingOptions, timestampMs);
   }
 
   /**
@@ -373,17 +376,49 @@ public final class ImageClassifier extends BaseVisionTaskApi {
       public abstract Builder setRunningMode(RunningMode runningMode);
 
       /**
-       * Sets the optional {@link ClassifierOptions} controling classification behavior, such as
-       * score threshold, number of results, etc.
+       * Sets the optional locale to use for display names specified through the TFLite Model
+       * Metadata, if any.
        */
-      public abstract Builder setClassifierOptions(ClassifierOptions classifierOptions);
+      public abstract Builder setDisplayNamesLocale(String locale);
+
+      /**
+       * Sets the optional maximum number of top-scored classification results to return.
+       *
+       * <p>If not set, all available results are returned. If set, must be > 0.
+       */
+      public abstract Builder setMaxResults(Integer maxResults);
+
+      /**
+       * Sets the optional score threshold. Results with score below this value are rejected.
+       *
+       * <p>Overrides the score threshold specified in the TFLite Model Metadata, if any.
+       */
+      public abstract Builder setScoreThreshold(Float scoreThreshold);
+
+      /**
+       * Sets the optional allowlist of category names.
+       *
+       * <p>If non-empty, detection results whose category name is not in this set will be filtered
+       * out. Duplicate or unknown category names are ignored. Mutually exclusive with {@code
+       * categoryDenylist}.
+       */
+      public abstract Builder setCategoryAllowlist(List<String> categoryAllowlist);
+
+      /**
+       * Sets the optional denylist of category names.
+       *
+       * <p>If non-empty, detection results whose category name is in this set will be filtered out.
+       * Duplicate or unknown category names are ignored. Mutually exclusive with {@code
+       * categoryAllowlist}.
+       */
+      public abstract Builder setCategoryDenylist(List<String> categoryDenylist);
 
       /**
        * Sets the {@link ResultListener} to receive the classification results asynchronously when
        * the image classifier is in the live stream mode.
        */
       public abstract Builder setResultListener(
-          ResultListener<ImageClassificationResult, MPImage> resultListener);
+          ResultListener<ImageClassifierResult, MPImage> resultListener);
 
       /** Sets an optional {@link ErrorListener}. */
       public abstract Builder setErrorListener(ErrorListener errorListener);
@@ -393,9 +428,7 @@ public final class ImageClassifier extends BaseVisionTaskApi {
       /**
        * Validates and builds the {@link ImageClassifierOptions} instance. *
        *
-       * @throws IllegalArgumentException if the result listener and the running mode are not
-       *     properly configured. The result listener should only be set when the image classifier
-       *     is in the live stream mode.
+       * @throws IllegalArgumentException if any of the set options are invalid.
        */
       public final ImageClassifierOptions build() {
         ImageClassifierOptions options = autoBuild();
@@ -410,6 +443,13 @@ public final class ImageClassifier extends BaseVisionTaskApi {
               "The image classifier is in the image or video mode, a user-defined result listener"
                   + " shouldn't be provided in ImageClassifierOptions.");
         }
+        if (options.maxResults().isPresent() && options.maxResults().get() <= 0) {
+          throw new IllegalArgumentException("If specified, maxResults must be > 0.");
+        }
+        if (!options.categoryAllowlist().isEmpty() && !options.categoryDenylist().isEmpty()) {
+          throw new IllegalArgumentException(
+              "Category allowlist and denylist are mutually exclusive.");
+        }
         return options;
       }
     }
@@ -418,15 +458,25 @@ public final class ImageClassifier extends BaseVisionTaskApi {
 
     abstract RunningMode runningMode();
 
-    abstract Optional<ClassifierOptions> classifierOptions();
+    abstract Optional<String> displayNamesLocale();
 
-    abstract Optional<ResultListener<ImageClassificationResult, MPImage>> resultListener();
+    abstract Optional<Integer> maxResults();
+
+    abstract Optional<Float> scoreThreshold();
+
+    abstract List<String> categoryAllowlist();
+
+    abstract List<String> categoryDenylist();
+
+    abstract Optional<ResultListener<ImageClassifierResult, MPImage>> resultListener();
 
     abstract Optional<ErrorListener> errorListener();
 
     public static Builder builder() {
       return new AutoValue_ImageClassifier_ImageClassifierOptions.Builder()
-          .setRunningMode(RunningMode.IMAGE);
+          .setRunningMode(RunningMode.IMAGE)
+          .setCategoryAllowlist(Collections.emptyList())
+          .setCategoryDenylist(Collections.emptyList());
     }
 
     /**
@@ -438,12 +488,21 @@ public final class ImageClassifier extends BaseVisionTaskApi {
           BaseOptionsProto.BaseOptions.newBuilder();
       baseOptionsBuilder.setUseStreamMode(runningMode() != RunningMode.IMAGE);
       baseOptionsBuilder.mergeFrom(convertBaseOptionsToProto(baseOptions()));
+      ClassifierOptionsProto.ClassifierOptions.Builder classifierOptionsBuilder =
+          ClassifierOptionsProto.ClassifierOptions.newBuilder();
+      displayNamesLocale().ifPresent(classifierOptionsBuilder::setDisplayNamesLocale);
+      maxResults().ifPresent(classifierOptionsBuilder::setMaxResults);
+      scoreThreshold().ifPresent(classifierOptionsBuilder::setScoreThreshold);
+      if (!categoryAllowlist().isEmpty()) {
+        classifierOptionsBuilder.addAllCategoryAllowlist(categoryAllowlist());
+      }
+      if (!categoryDenylist().isEmpty()) {
+        classifierOptionsBuilder.addAllCategoryDenylist(categoryDenylist());
+      }
       ImageClassifierGraphOptionsProto.ImageClassifierGraphOptions.Builder taskOptionsBuilder =
           ImageClassifierGraphOptionsProto.ImageClassifierGraphOptions.newBuilder()
-              .setBaseOptions(baseOptionsBuilder);
-      if (classifierOptions().isPresent()) {
-        taskOptionsBuilder.setClassifierOptions(classifierOptions().get().convertToProto());
-      }
+              .setBaseOptions(baseOptionsBuilder)
+              .setClassifierOptions(classifierOptionsBuilder);
       return CalculatorOptions.newBuilder()
           .setExtension(
               ImageClassifierGraphOptionsProto.ImageClassifierGraphOptions.ext,

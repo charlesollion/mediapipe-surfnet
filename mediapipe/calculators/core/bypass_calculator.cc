@@ -111,6 +111,10 @@ class BypassCalculator : public Node {
         cc->Outputs().Get(id).SetAny();
       }
     }
+    for (auto id = cc->InputSidePackets().BeginId();
+         id != cc->InputSidePackets().EndId(); ++id) {
+      cc->InputSidePackets().Get(id).SetAny();
+    }
     return absl::OkStatus();
   }
 
@@ -130,7 +134,7 @@ class BypassCalculator : public Node {
       pass_out.insert(entry.second);
       auto& packet = cc->Inputs().Get(entry.first).Value();
       if (packet.Timestamp() == cc->InputTimestamp()) {
-        cc->Outputs().Get(entry.first).AddPacket(packet);
+        cc->Outputs().Get(entry.second).AddPacket(packet);
       }
     }
     Timestamp bound = cc->InputTimestamp().NextAllowedInStream();

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package(default_visibility = ["//mediapipe/framework:mediapipe_internal"])
+package(default_visibility = ["//mediapipe/calculators/tensor:__subpackages__"])
 
 licenses(["notice"])
 
@@ -83,6 +83,7 @@ cc_test(
         ":sentencepiece_tokenizer",
         "//mediapipe/framework/port:gtest_main",
         "//mediapipe/tasks/cc/core:utils",
+        "@com_google_sentencepiece//src:sentencepiece_processor",
     ],
 )
 
@@ -132,6 +133,7 @@ cc_test(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
+        "@com_google_sentencepiece//src:sentencepiece_processor",
     ],
 )
 

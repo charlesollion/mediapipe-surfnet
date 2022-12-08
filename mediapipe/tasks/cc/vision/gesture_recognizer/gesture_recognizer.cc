@@ -31,7 +31,6 @@ limitations under the License.
 #include "mediapipe/framework/formats/rect.pb.h"
 #include "mediapipe/framework/packet.h"
 #include "mediapipe/tasks/cc/common.h"
-#include "mediapipe/tasks/cc/components/image_preprocessing.h"
 #include "mediapipe/tasks/cc/components/processors/proto/classifier_options.pb.h"
 #include "mediapipe/tasks/cc/core/base_task_api.h"
 #include "mediapipe/tasks/cc/core/model_resources.h"
@@ -57,8 +56,6 @@ namespace {
 
 using GestureRecognizerGraphOptionsProto = ::mediapipe::tasks::vision::
     gesture_recognizer::proto::GestureRecognizerGraphOptions;
-
-using ::mediapipe::tasks::components::containers::GestureRecognitionResult;
 
 constexpr char kHandGestureSubgraphTypeName[] =
     "mediapipe.tasks.vision.gesture_recognizer.GestureRecognizerGraph";
@@ -214,7 +211,7 @@ absl::StatusOr<std::unique_ptr<GestureRecognizer>> GestureRecognizer::Create(
       std::move(packets_callback));
 }
 
-absl::StatusOr<GestureRecognitionResult> GestureRecognizer::Recognize(
+absl::StatusOr<GestureRecognizerResult> GestureRecognizer::Recognize(
     mediapipe::Image image,
     std::optional<core::ImageProcessingOptions> image_processing_options) {
   if (image.UsesGpu()) {
@@ -250,7 +247,7 @@ absl::StatusOr<GestureRecognitionResult> GestureRecognizer::Recognize(
   };
 }
 
-absl::StatusOr<GestureRecognitionResult> GestureRecognizer::RecognizeForVideo(
+absl::StatusOr<GestureRecognizerResult> GestureRecognizer::RecognizeForVideo(
     mediapipe::Image image, int64 timestamp_ms,
     std::optional<core::ImageProcessingOptions> image_processing_options) {
   if (image.UsesGpu()) {

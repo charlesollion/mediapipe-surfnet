@@ -106,6 +106,13 @@ class MultiPort : public Single {
     return Single{&GetWithAutoGrow(&vec_, index)};
   }
 
+  template <typename U>
+  auto Cast() {
+    using SingleCastT =
+        std::invoke_result_t<decltype(&Single::template Cast<U>), Single*>;
+    return MultiPort<SingleCastT>(&vec_);
+  }
+
  private:
   std::vector<std::unique_ptr<Base>>& vec_;
 };
@@ -169,21 +176,39 @@ class SourceImpl {
       : SourceImpl(&GetWithAutoGrow(vec, 0)) {}
   explicit SourceImpl(SourceBase* base) : base_(base) {}
 
+  // Connects MediaPipe stream or side packet to a destination:
+  // - node input (input stream) / side input (input side packet)
+  // - graph output (output stream) / side output (output side packet).
+  //
+  // MediaPipe streams and side packets can be connected to multiple
+  // destinations. Side packets and packets added to streams are sent to all
+  // connected destinations.
   template <typename U,
             typename std::enable_if<AllowConnection<U>{}, int>::type = 0>
-  Src& AddTarget(const Dst<U>& dest) {
+  Src& ConnectTo(const Dst<U>& dest) {
     CHECK(dest.base_.source == nullptr);
     dest.base_.source = base_;
     base_->dests_.emplace_back(&dest.base_);
     return *this;
   }
+
+  // Shortcut for `ConnectTo`.
+  //
+  // Connects MediaPipe stream or side packet to a destination:
+  // - node input (input stream) / side input (input side packet)
+  // - graph output (output stream) / side output (output side packet).
+  //
+  // MediaPipe streams and side packets can be connected to multiple
+  // destinations. Side packets and packets added to streams are sent to all
+  // connected destinations.
+  template <typename U>
+  Src& operator>>(const Dst<U>& dest) {
+    return ConnectTo(dest);
+  }
+
   Src& SetName(std::string name) {
     base_->name_ = std::move(name);
     return *this;
-  }
-  template <typename U>
-  Src& operator>>(const Dst<U>& dest) {
-    return AddTarget(dest);
   }
 
   template <typename U,
@@ -387,11 +412,11 @@ using GenericNode = Node<internal::Generic>;
 template <class Calc>
 class Node : public NodeBase {
  public:
-  Node() : NodeBase(Calc::kCalculatorName) {}
+  Node() : NodeBase(std::string(Calc::kCalculatorName)) {}
   // Overrides the built-in calculator type string with the provided argument.
   // Can be used to create nodes from pure interfaces.
   // TODO: only use this for pure interfaces
-  Node(const std::string& type_override) : NodeBase(type_override) {}
+  Node(std::string type_override) : NodeBase(std::move(type_override)) {}
 
   // These methods only allow access to ports declared in the contract.
   // The argument must be a tag object created with the MPP_TAG macro.

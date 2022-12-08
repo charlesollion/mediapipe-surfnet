@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package(default_visibility = ["//mediapipe/tasks:internal"])
+package(default_visibility = ["//visibility:public"])
 
 android_library(
     name = "core",
@@ -44,6 +44,7 @@ mediapipe_tasks_core_aar(
     srcs = glob(["*.java"]) + [
         "//mediapipe/tasks/java/com/google/mediapipe/tasks/components/containers:java_src",
         "//mediapipe/tasks/java/com/google/mediapipe/tasks/components/processors:java_src",
+        "//mediapipe/tasks/java/com/google/mediapipe/tasks/components/utils:java_src",
         "//mediapipe/java/com/google/mediapipe/framework/image:java_src",
     ],
     manifest = "AndroidManifest.xml",

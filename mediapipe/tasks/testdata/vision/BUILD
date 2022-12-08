@@ -40,6 +40,7 @@ mediapipe_files(srcs = [
     "fist.jpg",
     "hand_landmark_full.tflite",
     "hand_landmark_lite.tflite",
+    "hand_landmarker.task",
     "left_hands.jpg",
     "left_hands_rotated.jpg",
     "mobilenet_v1_0.25_192_quantized_1_default_1.tflite",
@@ -140,15 +141,6 @@ filegroup(
         "palm_detection_full.tflite",
         "selfie_segm_128_128_3.tflite",
         "selfie_segm_144_256_3.tflite",
-    ],
-)
-
-# Gestures related models. Visible to model_maker.
-filegroup(
-    name = "test_gesture_models",
-    visibility = [
-        "//mediapipe/model_maker:__subpackages__",
-        "//mediapipe/tasks:internal",
     ],
 )
 

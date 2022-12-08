@@ -90,7 +90,7 @@ mediapipe_proto_library(
     name = "packet_generator_wrapper_calculator_proto",
     srcs = ["packet_generator_wrapper_calculator.proto"],
     def_py_proto = False,
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//mediapipe/framework:__subpackages__"],
     deps = [
         "//mediapipe/framework:calculator_options_proto",
         "//mediapipe/framework:packet_generator_proto",
@@ -120,13 +120,13 @@ cc_library(
     name = "fill_packet_set",
     srcs = ["fill_packet_set.cc"],
     hdrs = ["fill_packet_set.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//mediapipe/framework:__subpackages__"],
     deps = [
+        ":status_util",
         "//mediapipe/framework:packet_set",
         "//mediapipe/framework:packet_type",
         "//mediapipe/framework/port:status",
         "//mediapipe/framework/port:statusor",
-        "//mediapipe/framework/tool:status_util",
         "@com_google_absl//absl/memory",
     ],
 )
@@ -162,7 +162,6 @@ cc_library(
 cc_test(
     name = "executor_util_test",
     srcs = ["executor_util_test.cc"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
     deps = [
         ":executor_util",
         "//mediapipe/framework/port:gtest_main",
@@ -173,7 +172,7 @@ cc_test(
 cc_library(
     name = "options_map",
     hdrs = ["options_map.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//mediapipe:__subpackages__"],
     deps = [
         ":type_util",
         "//mediapipe/framework:calculator_cc_proto",
@@ -193,7 +192,7 @@ cc_library(
     name = "options_field_util",
     srcs = ["options_field_util.cc"],
     hdrs = ["options_field_util.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//visibility:private"],
     deps = [
         ":field_data_cc_proto",
         ":name_util",
@@ -216,7 +215,7 @@ cc_library(
     name = "options_syntax_util",
     srcs = ["options_syntax_util.cc"],
     hdrs = ["options_syntax_util.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//visibility:private"],
     deps = [
         ":name_util",
         ":options_field_util",
@@ -235,8 +234,9 @@ cc_library(
     name = "options_util",
     srcs = ["options_util.cc"],
     hdrs = ["options_util.h"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//visibility:public"],
     deps = [
+        ":name_util",
         ":options_field_util",
         ":options_map",
         ":options_registry",
@@ -254,7 +254,6 @@ cc_library(
         "//mediapipe/framework/port:advanced_proto",
         "//mediapipe/framework/port:any_proto",
         "//mediapipe/framework/port:status",
-        "//mediapipe/framework/tool:name_util",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -299,12 +298,12 @@ mediapipe_cc_test(
     data = [":node_chain_subgraph.proto"],
     requires_full_emulation = False,
     deps = [
+        ":node_chain_subgraph_cc_proto",
         ":options_field_util",
         ":options_registry",
         ":options_syntax_util",
         ":options_util",
         "//mediapipe/calculators/core:flow_limiter_calculator",
-        "//mediapipe/calculators/core:flow_limiter_calculator_cc_proto",
         "//mediapipe/framework:basic_types_registration",
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework:calculator_runner",
@@ -312,6 +311,7 @@ mediapipe_cc_test(
         "//mediapipe/framework/port:gtest_main",
         "//mediapipe/framework/port:parse_text_proto",
         "//mediapipe/framework/port:status",
+        "//mediapipe/framework/testdata:night_light_calculator_cc_proto",
         "//mediapipe/framework/testdata:night_light_calculator_options_lib",
         "//mediapipe/framework/tool:node_chain_subgraph_options_lib",
         "//mediapipe/util:header_util",
@@ -322,7 +322,7 @@ mediapipe_cc_test(
 cc_library(
     name = "packet_generator_wrapper_calculator",
     srcs = ["packet_generator_wrapper_calculator.cc"],
-    visibility = ["//mediapipe/framework:mediapipe_internal"],
+    visibility = ["//mediapipe/framework:__subpackages__"],
     deps = [
         ":packet_generator_wrapper_calculator_cc_proto",
         "//mediapipe/framework:calculator_base",
@@ -486,7 +486,6 @@ cc_library(
     deps = [
         ":proto_util_lite",
         "//mediapipe/framework:calculator_cc_proto",
-        "//mediapipe/framework/deps:proto_descriptor_cc_proto",
         "//mediapipe/framework/port:logging",
         "//mediapipe/framework/port:numbers",
         "//mediapipe/framework/port:ret_check",
@@ -738,9 +737,7 @@ cc_test(
         "//mediapipe/framework:calculator_cc_proto",
         "//mediapipe/framework:calculator_framework",
         "//mediapipe/framework:graph_service_manager",
-        "//mediapipe/framework:mediapipe_options_cc_proto",
         "//mediapipe/framework:packet",
-        "//mediapipe/framework:packet_generator_cc_proto",
         "//mediapipe/framework:packet_set",
         "//mediapipe/framework:packet_type",
         "//mediapipe/framework:status_handler",
@@ -923,7 +920,6 @@ cc_test(
         "//mediapipe/calculators/core:pass_through_calculator",
         "//mediapipe/framework:calculator_cc_proto",
         "//mediapipe/framework:calculator_framework",
-        "//mediapipe/framework:stream_handler_cc_proto",
         "//mediapipe/framework:subgraph",
         "//mediapipe/framework:test_calculators",
         "//mediapipe/framework/port:gtest_main",

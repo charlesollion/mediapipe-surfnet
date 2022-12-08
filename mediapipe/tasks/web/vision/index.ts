@@ -14,17 +14,9 @@
  * limitations under the License.
  */
 
-// Image Classifier
-export * from '../../../tasks/web/vision/image_classifier/image_classifier_options';
-export * from '../../../tasks/web/vision/image_classifier/image_classifier_result';
 export * from '../../../tasks/web/vision/image_classifier/image_classifier';
-
-// Gesture Recognizer
-export * from '../../../tasks/web/vision/gesture_recognizer/gesture_recognizer_options';
-export * from '../../../tasks/web/vision/gesture_recognizer/gesture_recognizer_result';
+export * from '../../../tasks/web/vision/image_embedder/image_embedder';
 export * from '../../../tasks/web/vision/gesture_recognizer/gesture_recognizer';
-
-// Object Detector
-export * from '../../../tasks/web/vision/object_detector/object_detector_options';
-export * from '../../../tasks/web/vision/object_detector/object_detector_result';
+export * from '../../../tasks/web/vision/hand_landmarker/hand_landmarker';
 export * from '../../../tasks/web/vision/object_detector/object_detector';
+export * from '../../../tasks/web/core/fileset_resolver';

@@ -14,4 +14,9 @@
  * limitations under the License.
  */
 
-export {ClassifierOptions as TextClassifierOptions} from '../../../../tasks/web/core/classifier_options';
+import {ClassifierOptions} from '../../../../tasks/web/core/classifier_options';
+import {TaskRunnerOptions} from '../../../../tasks/web/core/task_runner_options';
+
+/** Options to configure the MediaPipe Text Classifier Task */
+export declare interface TextClassifierOptions extends ClassifierOptions,
+                                                       TaskRunnerOptions {}

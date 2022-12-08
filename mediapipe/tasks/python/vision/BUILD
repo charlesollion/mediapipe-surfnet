@@ -14,7 +14,7 @@
 
 # Placeholder for internal Python strict library and test compatibility macro.
 
-package(default_visibility = ["//mediapipe/tasks:internal"])
+package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
 
@@ -47,10 +47,10 @@ py_library(
         "//mediapipe/python:packet_creator",
         "//mediapipe/python:packet_getter",
         "//mediapipe/tasks/cc/components/containers/proto:classifications_py_pb2",
+        "//mediapipe/tasks/cc/components/processors/proto:classifier_options_py_pb2",
         "//mediapipe/tasks/cc/vision/image_classifier/proto:image_classifier_graph_options_py_pb2",
-        "//mediapipe/tasks/python/components/containers:classifications",
+        "//mediapipe/tasks/python/components/containers:classification_result",
         "//mediapipe/tasks/python/components/containers:rect",
-        "//mediapipe/tasks/python/components/processors:classifier_options",
         "//mediapipe/tasks/python/core:base_options",
         "//mediapipe/tasks/python/core:optional_dependencies",
         "//mediapipe/tasks/python/core:task_info",
@@ -69,12 +69,35 @@ py_library(
         "//mediapipe/python:_framework_bindings",
         "//mediapipe/python:packet_creator",
         "//mediapipe/python:packet_getter",
-        "//mediapipe/tasks/cc/components/proto:segmenter_options_py_pb2",
         "//mediapipe/tasks/cc/vision/image_segmenter/proto:image_segmenter_graph_options_py_pb2",
+        "//mediapipe/tasks/cc/vision/image_segmenter/proto:segmenter_options_py_pb2",
         "//mediapipe/tasks/python/core:base_options",
         "//mediapipe/tasks/python/core:optional_dependencies",
         "//mediapipe/tasks/python/core:task_info",
         "//mediapipe/tasks/python/vision/core:base_vision_task_api",
+        "//mediapipe/tasks/python/vision/core:vision_task_running_mode",
+    ],
+)
+
+py_library(
+    name = "image_embedder",
+    srcs = [
+        "image_embedder.py",
+    ],
+    deps = [
+        "//mediapipe/python:_framework_bindings",
+        "//mediapipe/python:packet_creator",
+        "//mediapipe/python:packet_getter",
+        "//mediapipe/tasks/cc/components/containers/proto:embeddings_py_pb2",
+        "//mediapipe/tasks/cc/components/processors/proto:embedder_options_py_pb2",
+        "//mediapipe/tasks/cc/vision/image_embedder/proto:image_embedder_graph_options_py_pb2",
+        "//mediapipe/tasks/python/components/containers:embedding_result",
+        "//mediapipe/tasks/python/components/utils:cosine_similarity",
+        "//mediapipe/tasks/python/core:base_options",
+        "//mediapipe/tasks/python/core:optional_dependencies",
+        "//mediapipe/tasks/python/core:task_info",
+        "//mediapipe/tasks/python/vision/core:base_vision_task_api",
+        "//mediapipe/tasks/python/vision/core:image_processing_options",
         "//mediapipe/tasks/python/vision/core:vision_task_running_mode",
     ],
 )
@@ -94,6 +117,29 @@ py_library(
         "//mediapipe/tasks/python/components/containers:category",
         "//mediapipe/tasks/python/components/containers:landmark",
         "//mediapipe/tasks/python/components/processors:classifier_options",
+        "//mediapipe/tasks/python/core:base_options",
+        "//mediapipe/tasks/python/core:optional_dependencies",
+        "//mediapipe/tasks/python/core:task_info",
+        "//mediapipe/tasks/python/vision/core:base_vision_task_api",
+        "//mediapipe/tasks/python/vision/core:image_processing_options",
+        "//mediapipe/tasks/python/vision/core:vision_task_running_mode",
+    ],
+)
+
+py_library(
+    name = "hand_landmarker",
+    srcs = [
+        "hand_landmarker.py",
+    ],
+    deps = [
+        "//mediapipe/framework/formats:classification_py_pb2",
+        "//mediapipe/framework/formats:landmark_py_pb2",
+        "//mediapipe/python:_framework_bindings",
+        "//mediapipe/python:packet_creator",
+        "//mediapipe/python:packet_getter",
+        "//mediapipe/tasks/cc/vision/hand_landmarker/proto:hand_landmarker_graph_options_py_pb2",
+        "//mediapipe/tasks/python/components/containers:category",
+        "//mediapipe/tasks/python/components/containers:landmark",
         "//mediapipe/tasks/python/core:base_options",
         "//mediapipe/tasks/python/core:optional_dependencies",
         "//mediapipe/tasks/python/core:task_info",
