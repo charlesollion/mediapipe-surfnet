@@ -25,7 +25,7 @@ cc_binary(
     linkstatic = 1,
     deps = [
         # "//mediapipe/surfnet/graphs:mobile_calculators",
-        #"//mediapipe/surfnet/graphs:mobile_gpu_calculators",
+        # "//mediapipe/surfnet/graphs:mobile_gpu_calculators",
         "//mediapipe/surfnet/graphs/tracking:mobile_calculators",
         "//mediapipe/java/com/google/mediapipe/framework/jni:mediapipe_framework_jni",
     ],
@@ -161,7 +161,7 @@ android_binary(
     manifest = "AndroidManifest.xml",
     resource_files = glob(["res/**"]),
     assets = [
-        "//mediapipe/surfnet/graphs/tracking:mobile_gpu.binarypb",
+        "//mediapipe/surfnet/graphs/tracking:surfnet_track.binarypb",
         "//mediapipe/surfnet/models:yolov5s-fp16-optimize.tflite",
         "//mediapipe/surfnet/models:labelmap_yolo.txt",
         # "//mediapipe/models:ssdlite_object_detection.tflite",
@@ -173,7 +173,7 @@ android_binary(
         "appName": "Surfnet",
         "mainActivity": ".MainActivity",
         "cameraFacingFront": "False",
-        "binaryGraphName": "mobile_gpu.binarypb",
+        "binaryGraphName": "surfnet_track.binarypb",
         "inputVideoStreamName": "input_video",
         "outputVideoStreamName": "output_video",
         "flipFramesVertically": "True",
@@ -193,3 +193,4 @@ android_binary(
         ":mediapipe_jni_lib",
     ],
 )
+

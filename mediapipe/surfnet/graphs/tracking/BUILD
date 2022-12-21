@@ -56,8 +56,9 @@ cc_library(
 )
 
 mediapipe_binary_graph(
-    name = "mobile_gpu_binary_graph",
-    graph = "object_detection_tracking_mobile_gpu.pbtxt",
-    output_name = "mobile_gpu.binarypb",
+    name = "surfnet_track_graph",
+    graph = "surfnet_track.pbtxt",
+    # graph = "dummy_webcam.pbtxt",
+    output_name = "surfnet_track.binarypb",
     deps = [":mobile_calculators"],
 )

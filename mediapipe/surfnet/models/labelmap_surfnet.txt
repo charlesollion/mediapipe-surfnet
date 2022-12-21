@@ -8,3 +8,5 @@
     Fishing net
     Easily namable
     Unclear
+    Sheet
+    Plastic Bag

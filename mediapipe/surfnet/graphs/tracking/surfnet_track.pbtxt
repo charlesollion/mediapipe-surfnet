@@ -67,14 +67,14 @@ node {
   output_stream: "TENSORS:detection_tensors"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
-      # "mediapipe/surfnet/models/yolov5s-fp16.tflite"
+      #model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
+      model_path: "mediapipe/surfnet/models/yolo_surfnet-fp16.tflite"
       delegate: { 
         gpu { 
           use_advanced_gpu_api: true
           allow_precision_loss: true
         }
-        # tflite {}
+      #   # tflite {}
       }
     }
   }
@@ -86,7 +86,8 @@ node {
   output_stream: "DETECTIONS:detections"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
-      num_coords: 85
+      num_coords: 17
+      # 85 for standard yolo = num classes + 5 
       max_detections: 100
       num_boxes: 25200
       min_conf_thresh: 0.1
@@ -119,7 +120,8 @@ node {
   output_stream: "named_detections"
   node_options: {
     [type.googleapis.com/mediapipe.DetectionLabelIdToTextCalculatorOptions] {
-      label_map_path: "mediapipe/surfnet/models/labelmap_yolo.txt"
+      #label_map_path: "mediapipe/surfnet/models/labelmap_yolo.txt"
+      label_map_path: "mediapipe/surfnet/models/labelmap_surfnet.txt"
     }
   }
 }
