@@ -22,6 +22,7 @@ import {BaseOptions as BaseOptionsProto} from '../../../../tasks/cc/core/proto/b
 import {AudioTaskRunner} from '../../../../tasks/web/audio/core/audio_task_runner';
 import {convertClassifierOptionsToProto} from '../../../../tasks/web/components/processors/classifier_options';
 import {convertFromClassificationResultProto} from '../../../../tasks/web/components/processors/classifier_result';
+import {CachedGraphRunner} from '../../../../tasks/web/core/task_runner';
 import {WasmFileset} from '../../../../tasks/web/core/wasm_fileset';
 import {WasmModule} from '../../../../web/graph_runner/graph_runner';
 // Placeholder for internal dependency on trusted resource url
@@ -94,10 +95,11 @@ export class AudioClassifier extends AudioTaskRunner<AudioClassifierResult[]> {
         {baseOptions: {modelAssetPath}});
   }
 
+  /** @hideconstructor */
   constructor(
       wasmModule: WasmModule,
       glCanvas?: HTMLCanvasElement|OffscreenCanvas|null) {
-    super(wasmModule, glCanvas);
+    super(new CachedGraphRunner(wasmModule, glCanvas));
     this.options.setBaseOptions(new BaseOptionsProto());
   }
 
@@ -118,12 +120,13 @@ export class AudioClassifier extends AudioTaskRunner<AudioClassifierResult[]> {
    *
    * @param options The options for the audio classifier.
    */
-  override async setOptions(options: AudioClassifierOptions): Promise<void> {
-    await super.setOptions(options);
+  override setOptions(options: AudioClassifierOptions): Promise<void> {
     this.options.setClassifierOptions(convertClassifierOptionsToProto(
         options, this.options.getClassifierOptions()));
-    this.refreshGraph();
+    return this.applyOptions(options);
   }
+
+  // TODO: Add a classifyStream() that takes a timestamp
 
   /**
    * Performs audio classification on the provided audio clip and waits
@@ -170,7 +173,7 @@ export class AudioClassifier extends AudioTaskRunner<AudioClassifierResult[]> {
   }
 
   /** Updates the MediaPipe graph configuration. */
-  private refreshGraph(): void {
+  protected override refreshGraph(): void {
     const graphConfig = new CalculatorGraphConfig();
     graphConfig.addInputStream(AUDIO_STREAM);
     graphConfig.addInputStream(SAMPLE_RATE_STREAM);
@@ -193,8 +196,9 @@ export class AudioClassifier extends AudioTaskRunner<AudioClassifierResult[]> {
     graphConfig.addNode(classifierNode);
 
     this.graphRunner.attachProtoVectorListener(
-        TIMESTAMPED_CLASSIFICATIONS_STREAM, binaryProtos => {
+        TIMESTAMPED_CLASSIFICATIONS_STREAM, (binaryProtos, timestamp) => {
           this.addJsAudioClassificationResults(binaryProtos);
+          this.setLatestOutputTimestamp(timestamp);
         });
 
     const binaryGraph = graphConfig.serializeBinary();

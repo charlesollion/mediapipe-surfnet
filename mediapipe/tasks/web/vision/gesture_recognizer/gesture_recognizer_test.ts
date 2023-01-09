@@ -18,15 +18,15 @@ import 'jasmine';
 import {CalculatorGraphConfig} from '../../../../framework/calculator_pb';
 import {Classification, ClassificationList} from '../../../../framework/formats/classification_pb';
 import {Landmark, LandmarkList, NormalizedLandmark, NormalizedLandmarkList} from '../../../../framework/formats/landmark_pb';
-import {GraphRunnerImageLib} from '../../../../tasks/web/core/task_runner';
 import {addJasmineCustomFloatEqualityTester, createSpyWasmModule, MediapipeTasksFake, SpyWasmModule, verifyGraph, verifyListenersRegistered} from '../../../../tasks/web/core/task_runner_test_utils';
+import {VisionGraphRunner} from '../../../../tasks/web/vision/core/vision_task_runner';
 
 import {GestureRecognizer, GestureRecognizerOptions} from './gesture_recognizer';
 
 // The OSS JS API does not support the builder pattern.
 // tslint:disable:jspb-use-builder-pattern
 
-type ProtoListener = ((binaryProtos: Uint8Array[]) => void);
+type ProtoListener = ((binaryProtos: Uint8Array[], timestamp: number) => void);
 
 function createHandednesses(): Uint8Array[] {
   const handsProto = new ClassificationList();
@@ -98,7 +98,7 @@ class GestureRecognizerFake extends GestureRecognizer implements
     spyOn(this.graphRunner, 'addProtoToStream');
   }
 
-  getGraphRunner(): GraphRunnerImageLib {
+  getGraphRunner(): VisionGraphRunner {
     return this.graphRunner;
   }
 }
@@ -109,7 +109,8 @@ describe('GestureRecognizer', () => {
   beforeEach(async () => {
     addJasmineCustomFloatEqualityTester();
     gestureRecognizer = new GestureRecognizerFake();
-    await gestureRecognizer.setOptions({});  // Initialize graph
+    await gestureRecognizer.setOptions(
+        {baseOptions: {modelAssetBuffer: new Uint8Array([])}});
   });
 
   it('initializes graph', async () => {
@@ -253,11 +254,13 @@ describe('GestureRecognizer', () => {
     // Pass the test data to our listener
     gestureRecognizer.fakeWasmModule._waitUntilIdle.and.callFake(() => {
       verifyListenersRegistered(gestureRecognizer);
-      gestureRecognizer.listeners.get('hand_landmarks')!(createLandmarks());
+      gestureRecognizer.listeners.get('hand_landmarks')!
+          (createLandmarks(), 1337);
       gestureRecognizer.listeners.get('world_hand_landmarks')!
-          (createWorldLandmarks());
-      gestureRecognizer.listeners.get('handedness')!(createHandednesses());
-      gestureRecognizer.listeners.get('hand_gestures')!(createGestures());
+          (createWorldLandmarks(), 1337);
+      gestureRecognizer.listeners.get('handedness')!
+          (createHandednesses(), 1337);
+      gestureRecognizer.listeners.get('hand_gestures')!(createGestures(), 1337);
     });
 
     // Invoke the gesture recognizer
@@ -271,7 +274,7 @@ describe('GestureRecognizer', () => {
     expect(gestures).toEqual({
       'gestures': [[{
         'score': 0.2,
-        'index': 2,
+        'index': -1,
         'categoryName': 'gesture_label',
         'displayName': 'gesture_display_name'
       }]],
@@ -289,11 +292,13 @@ describe('GestureRecognizer', () => {
   it('clears results between invoations', async () => {
     // Pass the test data to our listener
     gestureRecognizer.fakeWasmModule._waitUntilIdle.and.callFake(() => {
-      gestureRecognizer.listeners.get('hand_landmarks')!(createLandmarks());
+      gestureRecognizer.listeners.get('hand_landmarks')!
+          (createLandmarks(), 1337);
       gestureRecognizer.listeners.get('world_hand_landmarks')!
-          (createWorldLandmarks());
-      gestureRecognizer.listeners.get('handedness')!(createHandednesses());
-      gestureRecognizer.listeners.get('hand_gestures')!(createGestures());
+          (createWorldLandmarks(), 1337);
+      gestureRecognizer.listeners.get('handedness')!
+          (createHandednesses(), 1337);
+      gestureRecognizer.listeners.get('hand_gestures')!(createGestures(), 1337);
     });
 
     // Invoke the gesture recognizer twice
@@ -303,5 +308,28 @@ describe('GestureRecognizer', () => {
     // Verify that gestures2 is not a concatenation of all previously returned
     // gestures.
     expect(gestures2).toEqual(gestures1);
+  });
+
+  it('returns empty results when no gestures are detected', async () => {
+    // Pass the test data to our listener
+    gestureRecognizer.fakeWasmModule._waitUntilIdle.and.callFake(() => {
+      verifyListenersRegistered(gestureRecognizer);
+      gestureRecognizer.listeners.get('hand_landmarks')!
+          (createLandmarks(), 1337);
+      gestureRecognizer.listeners.get('world_hand_landmarks')!
+          (createWorldLandmarks(), 1337);
+      gestureRecognizer.listeners.get('handedness')!
+          (createHandednesses(), 1337);
+      gestureRecognizer.listeners.get('hand_gestures')!([], 1337);
+    });
+
+    // Invoke the gesture recognizer
+    const gestures = gestureRecognizer.recognize({} as HTMLImageElement);
+    expect(gestures).toEqual({
+      'gestures': [],
+      'landmarks': [],
+      'worldLandmarks': [],
+      'handednesses': []
+    });
   });
 });

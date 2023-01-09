@@ -32,7 +32,8 @@ class TextClassifierFake extends TextClassifier implements MediapipeTasksFake {
   attachListenerSpies: jasmine.Spy[] = [];
   graph: CalculatorGraphConfig|undefined;
   fakeWasmModule: SpyWasmModule;
-  protoListener: ((binaryProto: Uint8Array) => void)|undefined;
+  protoListener:
+      ((binaryProto: Uint8Array, timestamp: number) => void)|undefined;
 
   constructor() {
     super(createSpyWasmModule(), /* glCanvas= */ null);
@@ -56,7 +57,8 @@ describe('TextClassifier', () => {
   beforeEach(async () => {
     addJasmineCustomFloatEqualityTester();
     textClassifier = new TextClassifierFake();
-    await textClassifier.setOptions({});  // Initialize graph
+    await textClassifier.setOptions(
+        {baseOptions: {modelAssetBuffer: new Uint8Array([])}});
   });
 
   it('initializes graph', async () => {
@@ -117,19 +119,20 @@ describe('TextClassifier', () => {
     classifcations.setHeadIndex(1);
     classifcations.setHeadName('headName');
     const classificationList = new ClassificationList();
-    const clasification = new Classification();
-    clasification.setIndex(1);
-    clasification.setScore(0.2);
-    clasification.setDisplayName('displayName');
-    clasification.setLabel('categoryName');
-    classificationList.addClassification(clasification);
+    const classification = new Classification();
+    classification.setIndex(1);
+    classification.setScore(0.2);
+    classification.setDisplayName('displayName');
+    classification.setLabel('categoryName');
+    classificationList.addClassification(classification);
     classifcations.setClassificationList(classificationList);
     classificationResult.addClassifications(classifcations);
 
     // Pass the test data to our listener
     textClassifier.fakeWasmModule._waitUntilIdle.and.callFake(() => {
       verifyListenersRegistered(textClassifier);
-      textClassifier.protoListener!(classificationResult.serializeBinary());
+      textClassifier.protoListener!
+          (classificationResult.serializeBinary(), 1337);
     });
 
     // Invoke the text classifier

@@ -32,22 +32,24 @@ export declare type SpyWasmModule = jasmine.SpyObj<SpyWasmModuleInternal>;
  * in pure JS/TS (and optionally spy on the calls).
  */
 export function createSpyWasmModule(): SpyWasmModule {
-  return jasmine.createSpyObj<SpyWasmModuleInternal>([
+  const spyWasmModule = jasmine.createSpyObj<SpyWasmModuleInternal>([
     '_setAutoRenderToScreen', 'stringToNewUTF8', '_attachProtoListener',
     '_attachProtoVectorListener', '_free', '_waitUntilIdle',
     '_addStringToInputStream', '_registerModelResourcesGraphService',
-    '_configureAudio'
+    '_configureAudio', '_malloc', '_addProtoToInputStream'
   ]);
+  spyWasmModule.HEAPU8 = jasmine.createSpyObj<Uint8Array>(['set']);
+  return spyWasmModule;
 }
 
 /**
  * Sets up our equality testing to use a custom float equality checking function
  * to avoid incorrect test results due to minor floating point inaccuracies.
  */
-export function addJasmineCustomFloatEqualityTester() {
+export function addJasmineCustomFloatEqualityTester(tolerance = 5e-8) {
   jasmine.addCustomEqualityTester((a, b) => {  // Custom float equality
     if (a === +a && b === +b && (a !== (a | 0) || b !== (b | 0))) {
-      return Math.abs(a - b) < 5e-8;
+      return Math.abs(a - b) < tolerance;
     }
     return;
   });

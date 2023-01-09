@@ -18,7 +18,6 @@ import {CalculatorGraphConfig} from '../../../../framework/calculator_pb';
 import {CalculatorOptions} from '../../../../framework/calculator_options_pb';
 import {ClassificationList} from '../../../../framework/formats/classification_pb';
 import {LandmarkList, NormalizedLandmarkList} from '../../../../framework/formats/landmark_pb';
-import {NormalizedRect} from '../../../../framework/formats/rect_pb';
 import {BaseOptions as BaseOptionsProto} from '../../../../tasks/cc/core/proto/base_options_pb';
 import {GestureClassifierGraphOptions} from '../../../../tasks/cc/vision/gesture_recognizer/proto/gesture_classifier_graph_options_pb';
 import {GestureRecognizerGraphOptions} from '../../../../tasks/cc/vision/gesture_recognizer/proto/gesture_recognizer_graph_options_pb';
@@ -30,7 +29,8 @@ import {Category} from '../../../../tasks/web/components/containers/category';
 import {Landmark, NormalizedLandmark} from '../../../../tasks/web/components/containers/landmark';
 import {convertClassifierOptionsToProto} from '../../../../tasks/web/components/processors/classifier_options';
 import {WasmFileset} from '../../../../tasks/web/core/wasm_fileset';
-import {VisionTaskRunner} from '../../../../tasks/web/vision/core/vision_task_runner';
+import {ImageProcessingOptions} from '../../../../tasks/web/vision/core/image_processing_options';
+import {VisionGraphRunner, VisionTaskRunner} from '../../../../tasks/web/vision/core/vision_task_runner';
 import {ImageSource, WasmModule} from '../../../../web/graph_runner/graph_runner';
 // Placeholder for internal dependency on trusted resource url
 
@@ -57,15 +57,8 @@ const DEFAULT_NUM_HANDS = 1;
 const DEFAULT_SCORE_THRESHOLD = 0.5;
 const DEFAULT_CATEGORY_INDEX = -1;
 
-const FULL_IMAGE_RECT = new NormalizedRect();
-FULL_IMAGE_RECT.setXCenter(0.5);
-FULL_IMAGE_RECT.setYCenter(0.5);
-FULL_IMAGE_RECT.setWidth(1);
-FULL_IMAGE_RECT.setHeight(1);
-
 /** Performs hand gesture recognition on images. */
-export class GestureRecognizer extends
-    VisionTaskRunner<GestureRecognizerResult> {
+export class GestureRecognizer extends VisionTaskRunner {
   private gestures: Category[][] = [];
   private landmarks: NormalizedLandmark[][] = [];
   private worldLandmarks: Landmark[][] = [];
@@ -127,10 +120,13 @@ export class GestureRecognizer extends
         {baseOptions: {modelAssetPath}});
   }
 
+  /** @hideconstructor */
   constructor(
       wasmModule: WasmModule,
       glCanvas?: HTMLCanvasElement|OffscreenCanvas|null) {
-    super(wasmModule, glCanvas);
+    super(
+        new VisionGraphRunner(wasmModule, glCanvas), IMAGE_STREAM,
+        NORM_RECT_STREAM);
 
     this.options = new GestureRecognizerGraphOptions();
     this.options.setBaseOptions(new BaseOptionsProto());
@@ -168,9 +164,7 @@ export class GestureRecognizer extends
    *
    * @param options The options for the gesture recognizer.
    */
-  override async setOptions(options: GestureRecognizerOptions): Promise<void> {
-    await super.setOptions(options);
-
+  override setOptions(options: GestureRecognizerOptions): Promise<void> {
     if ('numHands' in options) {
       this.handDetectorGraphOptions.setNumHands(
           options.numHands ?? DEFAULT_NUM_HANDS);
@@ -220,7 +214,7 @@ export class GestureRecognizer extends
           ?.clearClassifierOptions();
     }
 
-    this.refreshGraph();
+    return this.applyOptions(options);
   }
 
   /**
@@ -229,10 +223,16 @@ export class GestureRecognizer extends
    * GestureRecognizer is created with running mode `image`.
    *
    * @param image A single image to process.
+   * @param imageProcessingOptions the `ImageProcessingOptions` specifying how
+   *    to process the input image before running inference.
    * @return The detected gestures.
    */
-  recognize(image: ImageSource): GestureRecognizerResult {
-    return this.processImageData(image);
+  recognize(
+      image: ImageSource, imageProcessingOptions?: ImageProcessingOptions):
+      GestureRecognizerResult {
+    this.resetResults();
+    this.processImageData(image, imageProcessingOptions);
+    return this.processResults();
   }
 
   /**
@@ -242,34 +242,43 @@ export class GestureRecognizer extends
    *
    * @param videoFrame A video frame to process.
    * @param timestamp The timestamp of the current frame, in ms.
+   * @param imageProcessingOptions the `ImageProcessingOptions` specifying how
+   *    to process the input image before running inference.
    * @return The detected gestures.
    */
-  recognizeForVideo(videoFrame: ImageSource, timestamp: number):
+  recognizeForVideo(
+      videoFrame: ImageSource, timestamp: number,
+      imageProcessingOptions?: ImageProcessingOptions):
       GestureRecognizerResult {
-    return this.processVideoData(videoFrame, timestamp);
+    this.resetResults();
+    this.processVideoData(videoFrame, imageProcessingOptions, timestamp);
+    return this.processResults();
   }
 
-  /** Runs the gesture recognition and blocks on the response. */
-  protected override process(imageSource: ImageSource, timestamp: number):
-      GestureRecognizerResult {
+  private resetResults(): void {
     this.gestures = [];
     this.landmarks = [];
     this.worldLandmarks = [];
     this.handednesses = [];
+  }
 
-    this.graphRunner.addGpuBufferAsImageToStream(
-        imageSource, IMAGE_STREAM, timestamp);
-    this.graphRunner.addProtoToStream(
-        FULL_IMAGE_RECT.serializeBinary(), 'mediapipe.NormalizedRect',
-        NORM_RECT_STREAM, timestamp);
-    this.finishProcessing();
-
-    return {
-      gestures: this.gestures,
-      landmarks: this.landmarks,
-      worldLandmarks: this.worldLandmarks,
-      handednesses: this.handednesses
-    };
+  private processResults(): GestureRecognizerResult {
+    if (this.gestures.length === 0) {
+      // If no gestures are detected in the image, just return an empty list
+      return {
+        gestures: [],
+        landmarks: [],
+        worldLandmarks: [],
+        handednesses: [],
+      };
+    } else {
+      return {
+        gestures: this.gestures,
+        landmarks: this.landmarks,
+        worldLandmarks: this.worldLandmarks,
+        handednesses: this.handednesses
+      };
+    }
   }
 
   /** Sets the default values for the graph. */
@@ -284,15 +293,19 @@ export class GestureRecognizer extends
   }
 
   /** Converts the proto data to a Category[][] structure. */
-  private toJsCategories(data: Uint8Array[]): Category[][] {
+  private toJsCategories(data: Uint8Array[], populateIndex = true):
+      Category[][] {
     const result: Category[][] = [];
     for (const binaryProto of data) {
       const inputList = ClassificationList.deserializeBinary(binaryProto);
       const outputList: Category[] = [];
       for (const classification of inputList.getClassificationList()) {
+        const index = populateIndex && classification.hasIndex() ?
+            classification.getIndex()! :
+            DEFAULT_CATEGORY_INDEX;
         outputList.push({
           score: classification.getScore() ?? 0,
-          index: classification.getIndex() ?? DEFAULT_CATEGORY_INDEX,
+          index,
           categoryName: classification.getLabel() ?? '',
           displayName: classification.getDisplayName() ?? '',
         });
@@ -341,7 +354,7 @@ export class GestureRecognizer extends
   }
 
   /** Updates the MediaPipe graph configuration. */
-  private refreshGraph(): void {
+  protected override refreshGraph(): void {
     const graphConfig = new CalculatorGraphConfig();
     graphConfig.addInputStream(IMAGE_STREAM);
     graphConfig.addInputStream(NORM_RECT_STREAM);
@@ -367,20 +380,27 @@ export class GestureRecognizer extends
     graphConfig.addNode(recognizerNode);
 
     this.graphRunner.attachProtoVectorListener(
-        LANDMARKS_STREAM, binaryProto => {
+        LANDMARKS_STREAM, (binaryProto, timestamp) => {
           this.addJsLandmarks(binaryProto);
+          this.setLatestOutputTimestamp(timestamp);
         });
     this.graphRunner.attachProtoVectorListener(
-        WORLD_LANDMARKS_STREAM, binaryProto => {
+        WORLD_LANDMARKS_STREAM, (binaryProto, timestamp) => {
           this.adddJsWorldLandmarks(binaryProto);
+          this.setLatestOutputTimestamp(timestamp);
         });
     this.graphRunner.attachProtoVectorListener(
-        HAND_GESTURES_STREAM, binaryProto => {
-          this.gestures.push(...this.toJsCategories(binaryProto));
+        HAND_GESTURES_STREAM, (binaryProto, timestamp) => {
+          // Gesture index is not used, because the final gesture result comes
+          // from multiple classifiers.
+          this.gestures.push(
+              ...this.toJsCategories(binaryProto, /* populateIndex= */ false));
+          this.setLatestOutputTimestamp(timestamp);
         });
     this.graphRunner.attachProtoVectorListener(
-        HANDEDNESS_STREAM, binaryProto => {
+        HANDEDNESS_STREAM, (binaryProto, timestamp) => {
           this.handednesses.push(...this.toJsCategories(binaryProto));
+          this.setLatestOutputTimestamp(timestamp);
         });
 
     const binaryGraph = graphConfig.serializeBinary();

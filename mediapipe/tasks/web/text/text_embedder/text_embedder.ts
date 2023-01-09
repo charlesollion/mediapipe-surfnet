@@ -23,7 +23,7 @@ import {Embedding} from '../../../../tasks/web/components/containers/embedding_r
 import {convertEmbedderOptionsToProto} from '../../../../tasks/web/components/processors/embedder_options';
 import {convertFromEmbeddingResultProto} from '../../../../tasks/web/components/processors/embedder_result';
 import {computeCosineSimilarity} from '../../../../tasks/web/components/utils/cosine_similarity';
-import {TaskRunner} from '../../../../tasks/web/core/task_runner';
+import {CachedGraphRunner, TaskRunner} from '../../../../tasks/web/core/task_runner';
 import {WasmFileset} from '../../../../tasks/web/core/wasm_fileset';
 import {WasmModule} from '../../../../web/graph_runner/graph_runner';
 // Placeholder for internal dependency on trusted resource url
@@ -96,10 +96,11 @@ export class TextEmbedder extends TaskRunner {
         {baseOptions: {modelAssetPath}});
   }
 
+  /** @hideconstructor */
   constructor(
       wasmModule: WasmModule,
       glCanvas?: HTMLCanvasElement|OffscreenCanvas|null) {
-    super(wasmModule, glCanvas);
+    super(new CachedGraphRunner(wasmModule, glCanvas));
     this.options.setBaseOptions(new BaseOptionsProto());
   }
 
@@ -112,11 +113,10 @@ export class TextEmbedder extends TaskRunner {
    *
    * @param options The options for the text embedder.
    */
-  override async setOptions(options: TextEmbedderOptions): Promise<void> {
-    await super.setOptions(options);
+  override setOptions(options: TextEmbedderOptions): Promise<void> {
     this.options.setEmbedderOptions(convertEmbedderOptionsToProto(
         options, this.options.getEmbedderOptions()));
-    this.refreshGraph();
+    return this.applyOptions(options);
   }
 
   protected override get baseOptions(): BaseOptionsProto {
@@ -135,9 +135,10 @@ export class TextEmbedder extends TaskRunner {
    * @return The embedding resuls of the text
    */
   embed(text: string): TextEmbedderResult {
-    // Get text embeddings by running our MediaPipe graph.
-    this.graphRunner.addStringToStream(
-        text, INPUT_STREAM, /* timestamp= */ performance.now());
+    // Increment the timestamp by 1 millisecond to guarantee that we send
+    // monotonically increasing timestamps to the graph.
+    const syntheticTimestamp = this.getLatestOutputTimestamp() + 1;
+    this.graphRunner.addStringToStream(text, INPUT_STREAM, syntheticTimestamp);
     this.finishProcessing();
     return this.embeddingResult;
   }
@@ -156,7 +157,7 @@ export class TextEmbedder extends TaskRunner {
   }
 
   /** Updates the MediaPipe graph configuration. */
-  private refreshGraph(): void {
+  protected override refreshGraph(): void {
     const graphConfig = new CalculatorGraphConfig();
     graphConfig.addInputStream(INPUT_STREAM);
     graphConfig.addOutputStream(EMBEDDINGS_STREAM);
@@ -173,10 +174,14 @@ export class TextEmbedder extends TaskRunner {
 
     graphConfig.addNode(embedderNode);
 
-    this.graphRunner.attachProtoListener(EMBEDDINGS_STREAM, binaryProto => {
-      const embeddingResult = EmbeddingResult.deserializeBinary(binaryProto);
-      this.embeddingResult = convertFromEmbeddingResultProto(embeddingResult);
-    });
+    this.graphRunner.attachProtoListener(
+        EMBEDDINGS_STREAM, (binaryProto, timestamp) => {
+          const embeddingResult =
+              EmbeddingResult.deserializeBinary(binaryProto);
+          this.embeddingResult =
+              convertFromEmbeddingResultProto(embeddingResult);
+          this.setLatestOutputTimestamp(timestamp);
+        });
 
     const binaryGraph = graphConfig.serializeBinary();
     this.setGraph(new Uint8Array(binaryGraph), /* isBinary= */ true);

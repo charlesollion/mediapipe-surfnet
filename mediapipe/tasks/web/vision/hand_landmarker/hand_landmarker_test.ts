@@ -18,16 +18,17 @@ import 'jasmine';
 import {CalculatorGraphConfig} from '../../../../framework/calculator_pb';
 import {Classification, ClassificationList} from '../../../../framework/formats/classification_pb';
 import {Landmark, LandmarkList, NormalizedLandmark, NormalizedLandmarkList} from '../../../../framework/formats/landmark_pb';
-import {GraphRunnerImageLib} from '../../../../tasks/web/core/task_runner';
 import {addJasmineCustomFloatEqualityTester, createSpyWasmModule, MediapipeTasksFake, SpyWasmModule, verifyGraph, verifyListenersRegistered} from '../../../../tasks/web/core/task_runner_test_utils';
+import {VisionGraphRunner} from '../../../../tasks/web/vision/core/vision_task_runner';
 
 import {HandLandmarker} from './hand_landmarker';
 import {HandLandmarkerOptions} from './hand_landmarker_options';
 
+
 // The OSS JS API does not support the builder pattern.
 // tslint:disable:jspb-use-builder-pattern
 
-type ProtoListener = ((binaryProtos: Uint8Array[]) => void);
+type ProtoListener = ((binaryProtos: Uint8Array[], timestamp: number) => void);
 
 function createHandednesses(): Uint8Array[] {
   const handsProto = new ClassificationList();
@@ -87,7 +88,7 @@ class HandLandmarkerFake extends HandLandmarker implements MediapipeTasksFake {
     spyOn(this.graphRunner, 'addProtoToStream');
   }
 
-  getGraphRunner(): GraphRunnerImageLib {
+  getGraphRunner(): VisionGraphRunner {
     return this.graphRunner;
   }
 }
@@ -98,7 +99,8 @@ describe('HandLandmarker', () => {
   beforeEach(async () => {
     addJasmineCustomFloatEqualityTester();
     handLandmarker = new HandLandmarkerFake();
-    await handLandmarker.setOptions({});  // Initialize graph
+    await handLandmarker.setOptions(
+        {baseOptions: {modelAssetBuffer: new Uint8Array([])}});
   });
 
   it('initializes graph', async () => {
@@ -205,10 +207,10 @@ describe('HandLandmarker', () => {
     // Pass the test data to our listener
     handLandmarker.fakeWasmModule._waitUntilIdle.and.callFake(() => {
       verifyListenersRegistered(handLandmarker);
-      handLandmarker.listeners.get('hand_landmarks')!(createLandmarks());
+      handLandmarker.listeners.get('hand_landmarks')!(createLandmarks(), 1337);
       handLandmarker.listeners.get('world_hand_landmarks')!
-          (createWorldLandmarks());
-      handLandmarker.listeners.get('handedness')!(createHandednesses());
+          (createWorldLandmarks(), 1337);
+      handLandmarker.listeners.get('handedness')!(createHandednesses(), 1337);
     });
 
     // Invoke the hand landmarker
@@ -234,10 +236,10 @@ describe('HandLandmarker', () => {
   it('clears results between invoations', async () => {
     // Pass the test data to our listener
     handLandmarker.fakeWasmModule._waitUntilIdle.and.callFake(() => {
-      handLandmarker.listeners.get('hand_landmarks')!(createLandmarks());
+      handLandmarker.listeners.get('hand_landmarks')!(createLandmarks(), 1337);
       handLandmarker.listeners.get('world_hand_landmarks')!
-          (createWorldLandmarks());
-      handLandmarker.listeners.get('handedness')!(createHandednesses());
+          (createWorldLandmarks(), 1337);
+      handLandmarker.listeners.get('handedness')!(createHandednesses(), 1337);
     });
 
     // Invoke the hand landmarker twice
