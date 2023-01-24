@@ -47,6 +47,28 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "run_graph_main_gpu",
+    srcs = ["run_graph_main_gpu.cc"],
+    deps = [
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:image_frame",
+        "//mediapipe/framework/formats:image_frame_opencv",
+        "//mediapipe/framework/port:file_helpers",
+        "//mediapipe/framework/port:opencv_highgui",
+        "//mediapipe/framework/port:opencv_imgproc",
+        "//mediapipe/framework/port:opencv_video",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/gpu:gl_calculator_helper",
+        "//mediapipe/gpu:gpu_buffer",
+        "//mediapipe/gpu:gpu_shared_data_internal",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+    ],
+)
+
+
 cc_binary(
     name = "surfnet",
     data = [
@@ -56,5 +78,23 @@ cc_binary(
     deps = [
         ":run_graph_main",
         "//mediapipe/surfnet/graphs:desktop_tflite_calculators",
+    ],
+)
+
+cc_binary(
+    name = "surfnettrack",
+    data = [
+        # "//mediapipe/surfnet/models:yolov5s-fp16-optimize.tflite",
+        # "//mediapipe/surfnet/models:yolov5s-fp16-optimize.tflite",
+        # "//mediapipe/surfnet/models:yolo_surfnet_fix.tflite",
+        "//mediapipe/surfnet/models:yolo_pau-fp16.tflite",
+        "//mediapipe/surfnet/models:labelmap_yolo.txt",
+    ],
+    deps = [
+        # "//mediapipe/surfnet/graphs:desktop_tracking_tflite_calculators",
+        # ":run_graph_main",
+        ### uses mobile calculators for desktop GPU: does not work (error to be checked)
+        ":run_graph_main_gpu",
+        "//mediapipe/surfnet/graphs/tracking:mobile_calculators",
     ],
 )

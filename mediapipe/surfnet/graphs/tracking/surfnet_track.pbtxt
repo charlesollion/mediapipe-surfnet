@@ -1,8 +1,5 @@
-# MediaPipe graph that performs object detection and tracking with TensorFlow
-# Lite on GPU.
-# Used in the examples in
-# mediapipie/examples/android/src/java/com/mediapipe/apps/objecttrackinggpu
-
+# Surfnet Track for mobile
+# Needs to be converted to binarypb (see mediapipe_binary_graph in BUILD)
 
 profiler_config {
   trace_enabled: true
@@ -68,7 +65,8 @@ node {
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
       #model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
-      model_path: "mediapipe/surfnet/models/yolo_surfnet-fp16.tflite"
+      # model_path: "mediapipe/surfnet/models/yolo_surfnet_fix.tflite"
+      model_path: "mediapipe/surfnet/models/yolo_pau-fp16.tflite"
       delegate: { 
         gpu { 
           use_advanced_gpu_api: true
@@ -87,12 +85,14 @@ node {
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
       num_coords: 17
+      # 17
       # 85 for standard yolo = num classes + 5 
       max_detections: 100
       num_boxes: 25200
-      min_conf_thresh: 0.1
+      min_conf_thresh: 0.15
       flip_vertically: false
       reverse_output_order: true
+      # ignore_classes: [9]
     }
   }
 }
@@ -105,7 +105,7 @@ node {
   node_options: {
     [type.googleapis.com/mediapipe.NonMaxSuppressionCalculatorOptions] {
       min_suppression_threshold: 0.4
-      max_num_detections: 3
+      max_num_detections: 6
       overlap_type: INTERSECTION_OVER_UNION
       return_empty_detections: true
     }

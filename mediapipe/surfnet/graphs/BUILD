@@ -24,8 +24,7 @@ cc_library(
         "//mediapipe/calculators/image:image_transformation_calculator",
         "//mediapipe/calculators/tflite:ssd_anchors_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
-        # "//mediapipe/calculators/tflite:tflite_inference_calculator",
-        "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
+        "//mediapipe/calculators/tflite:tflite_inference_calculator",
         "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
@@ -47,7 +46,6 @@ cc_library(
         "//mediapipe/calculators/tflite:ssd_anchors_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
         "//mediapipe/calculators/tflite:tflite_inference_calculator",
-        # "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
         "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
@@ -91,8 +89,7 @@ cc_library(
         "//mediapipe/calculators/image:image_transformation_calculator",
         "//mediapipe/calculators/tflite:ssd_anchors_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
-        # "//mediapipe/calculators/tflite:tflite_inference_calculator",
-        "//mediapipe/calculators/tflite:tflite_test_inference_calculator",
+        "//mediapipe/calculators/tflite:tflite_inference_calculator",
         "//mediapipe/calculators/tflite:tflite_tensors_to_detections_calculator",
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
@@ -102,6 +99,39 @@ cc_library(
         "//mediapipe/calculators/video:opencv_video_encoder_calculator",
         "//mediapipe/calculators/core:pass_through_calculator",
         "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_detections_calculator",
+    ],
+)
+
+cc_library(
+    name = "desktop_tracking_tflite_calculators",
+    deps = [
+        "//mediapipe/calculators/video:opencv_video_decoder_calculator",
+        "//mediapipe/calculators/video:opencv_video_encoder_calculator",
+
+        "//mediapipe/calculators/core:packet_resampler_calculator",
+        "//mediapipe/calculators/core:flow_limiter_calculator",
+
+        "//mediapipe/calculators/image:image_transformation_calculator",
+        "//mediapipe/calculators/tflite:tflite_converter_calculator",
+        "//mediapipe/calculators/tflite:tflite_inference_calculator",
+        "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
+        "//mediapipe/calculators/util:non_max_suppression_calculator",
+        "//mediapipe/calculators/tflite:tflite_yolo_tensors_to_detections_calculator",
+
+        "//mediapipe/calculators/video:box_tracker_calculator",
+        "//mediapipe/calculators/video:flow_packager_calculator",
+        "//mediapipe/calculators/video:motion_analysis_calculator",
+        "//mediapipe/framework/stream_handler:immediate_input_stream_handler",
+        "//mediapipe/framework/stream_handler:sync_set_input_stream_handler",
+        "//mediapipe/gpu:gpu_buffer_to_image_frame_calculator",
+
+        "//mediapipe/calculators/util:detection_unique_id_calculator",
+        "//mediapipe/calculators/util:detections_to_timed_box_list_calculator",
+        "//mediapipe/calculators/video:tracked_detection_manager_calculator",
+
+        "//mediapipe/calculators/util:annotation_overlay_calculator",
+        "//mediapipe/calculators/util:detections_to_render_data_calculator",
+        "//mediapipe/calculators/util:rect_to_render_data_calculator",
     ],
 )
 

@@ -111,6 +111,7 @@ class TfLiteYoloTensorsToDetectionsCalculator : public CalculatorBase {
   int num_coords_ = 85;
   float min_conf_thresh_ = 0.3;
   bool flip_vertically_ = false;
+  std::set<int> ignore_classes_;
 
 #if MEDIAPIPE_TFLITE_GL_INFERENCE
   mediapipe::GlCalculatorHelper gpu_helper_;
@@ -241,7 +242,12 @@ absl::Status TfLiteYoloTensorsToDetectionsCalculator::DecodeTensor(const float* 
       }
     }
     float final_score = max_score * confidence;
+    // remove classes below min threshold
     if (final_score < min_conf_thresh_) {
+      continue;
+    }
+    // remove classes within ignore_classes
+    if (ignore_classes_.find(class_id) != ignore_classes_.end()) {
       continue;
     }
     (*scores)[cur_idx] = final_score;
@@ -359,6 +365,9 @@ absl::Status TfLiteYoloTensorsToDetectionsCalculator::LoadOptions(
   num_boxes_ = options_.num_boxes();
   min_conf_thresh_ = options_.min_conf_thresh();
   flip_vertically_ = options_.flip_vertically();
+  for (int i = 0; i < options_.ignore_classes_size(); ++i) {
+    ignore_classes_.insert(options_.ignore_classes(i));
+  }
 
   return absl::OkStatus();
 }

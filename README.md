@@ -43,6 +43,14 @@ export GLOG_logtostderr=1
 ./bazel-bin/mediapipe/surfnet/desktop/surfnet --calculator_graph_config_file=mediapipe/surfnet/graphs/surfnet.pbtxt
 ``` 
 
+```sh
+export GLOG_logtostderr=1
+./bazel-bin/mediapipe/surfnet/desktop/surfnet --calculator_graph_config_file=mediapipe/surfnet/graphs/surfnet.pbtxt
+``` 
+
+./bazel-bin/mediapipe/surfnet/desktop/surfnettrack --calculator_graph_config_file=mediapipe/surfnet/graphs/tracking/surfnet_track_gpu.pbtxt --input_video_path=/media/charles/DATA/Programs/surfnet/vids/test_30sfullhd.mp4 --output_video_path=/media/charles/DATA/test.mp4
+
+
 ### Build AAR
 
 ```sh

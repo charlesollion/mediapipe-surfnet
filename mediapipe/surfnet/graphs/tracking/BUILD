@@ -32,6 +32,7 @@ cc_library(
         # "//mediapipe/surfnet/graphs/tracking/subgraphs:renderer_gpu",
 
         "//mediapipe/calculators/image:image_transformation_calculator",
+        "//mediapipe/calculators/image:image_cropping_calculator",
         "//mediapipe/calculators/tflite:tflite_converter_calculator",
         "//mediapipe/calculators/tflite:tflite_inference_calculator",
         "//mediapipe/calculators/util:detection_label_id_to_text_calculator",
