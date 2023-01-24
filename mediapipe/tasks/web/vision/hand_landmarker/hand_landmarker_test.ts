@@ -129,7 +129,7 @@ describe('HandLandmarker', () => {
     ]);
   });
 
-  describe('setOptions() ', () => {
+  describe('setOptions()', () => {
     interface TestCase {
       optionPath: [keyof HandLandmarkerOptions, ...string[]];
       fieldPath: string[];
@@ -201,6 +201,14 @@ describe('HandLandmarker', () => {
             handLandmarker, [testCase.fieldPath, testCase.defaultValue]);
       });
     }
+  });
+
+  it('doesn\'t support region of interest', () => {
+    expect(() => {
+      handLandmarker.detect(
+          {} as HTMLImageElement,
+          {regionOfInterest: {left: 0, right: 0, top: 0, bottom: 0}});
+    }).toThrowError('This task doesn\'t support region-of-interest.');
   });
 
   it('transforms results', async () => {

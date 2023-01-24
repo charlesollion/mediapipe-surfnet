@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 The MediaPipe Authors. All Rights Reserved.
+ * Copyright 2023 The MediaPipe Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-import {FilesetResolver as FilesetResolverImpl, TextClassifier as TextClassifierImpl, TextEmbedder as TextEmbedderImpl} from '../../tasks/web/text/index';
-
-// Declare the variables locally so that Rollup in OSS includes them explcilty
-// as exports.
-const FilesetResolver = FilesetResolverImpl;
-const TextClassifier = TextClassifierImpl;
-const TextEmbedder = TextEmbedderImpl;
-
-export {FilesetResolver, TextClassifier, TextEmbedder};
+export * from '../../../tasks/web/audio/audio_classifier/audio_classifier';
+export * from '../../../tasks/web/audio/audio_embedder/audio_embedder';
+export * from '../../../tasks/web/core/fileset_resolver';

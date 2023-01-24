@@ -42,13 +42,16 @@ export abstract class VisionTaskRunner extends TaskRunner {
    * @param normRectStreamName the name of the input normalized rect image
    *     stream used to provide (mandatory) rotation and (optional)
    *     region-of-interest.
+   * @param roiAllowed Whether this task supports Region-Of-Interest
+   *     pre-processing
    *
    * @hideconstructor protected
    */
   constructor(
       protected override readonly graphRunner: VisionGraphRunner,
       private readonly imageStreamName: string,
-      private readonly normRectStreamName: string) {
+      private readonly normRectStreamName: string,
+      private readonly roiAllowed: boolean) {
     super(graphRunner);
   }
 
@@ -56,7 +59,7 @@ export abstract class VisionTaskRunner extends TaskRunner {
   override applyOptions(options: VisionTaskOptions): Promise<void> {
     if ('runningMode' in options) {
       const useStreamMode =
-          !!options.runningMode && options.runningMode !== 'image';
+          !!options.runningMode && options.runningMode !== 'IMAGE';
       this.baseOptions.setUseStreamMode(useStreamMode);
     }
     return super.applyOptions(options);
@@ -69,7 +72,7 @@ export abstract class VisionTaskRunner extends TaskRunner {
     if (!!this.baseOptions?.getUseStreamMode()) {
       throw new Error(
           'Task is not initialized with image mode. ' +
-          '\'runningMode\' must be set to \'image\'.');
+          '\'runningMode\' must be set to \'IMAGE\'.');
     }
 
     // Increment the timestamp by 1 millisecond to guarantee that we send
@@ -86,7 +89,7 @@ export abstract class VisionTaskRunner extends TaskRunner {
     if (!this.baseOptions?.getUseStreamMode()) {
       throw new Error(
           'Task is not initialized with video mode. ' +
-          '\'runningMode\' must be set to \'video\'.');
+          '\'runningMode\' must be set to \'VIDEO\'.');
     }
     this.process(imageFrame, imageProcessingOptions, timestamp);
   }
@@ -96,6 +99,10 @@ export abstract class VisionTaskRunner extends TaskRunner {
     const normalizedRect = new NormalizedRect();
 
     if (imageProcessingOptions?.regionOfInterest) {
+      if (!this.roiAllowed) {
+        throw new Error('This task doesn\'t support region-of-interest.');
+      }
+
       const roi = imageProcessingOptions.regionOfInterest;
 
       if (roi.left >= roi.right || roi.top >= roi.bottom) {

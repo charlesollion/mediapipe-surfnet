@@ -1,4 +1,4 @@
-# Copyright 2022 The MediaPipe Authors. All Rights Reserved.
+# Copyright 2023 The MediaPipe Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package(default_visibility = ["//mediapipe/tasks:internal"])
+load("//mediapipe/framework/port:build_config.bzl", "mediapipe_proto_library")
+
+package(default_visibility = [
+    "//mediapipe/tasks:internal",
+])
 
 licenses(["notice"])
 
-objc_library(
-    name = "MPPClassifierOptionsHelpers",
-    srcs = ["sources/MPPClassifierOptions+Helpers.mm"],
-    hdrs = ["sources/MPPClassifierOptions+Helpers.h"],
+mediapipe_proto_library(
+    name = "face_detector_graph_options_proto",
+    srcs = ["face_detector_graph_options.proto"],
     deps = [
-        "//mediapipe/tasks/cc/components/processors/proto:classifier_options_cc_proto",
-        "//mediapipe/tasks/ios/common/utils:NSStringHelpers",
-        "//mediapipe/tasks/ios/components/processors:MPPClassifierOptions",
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+        "//mediapipe/tasks/cc/core/proto:base_options_proto",
     ],
 )

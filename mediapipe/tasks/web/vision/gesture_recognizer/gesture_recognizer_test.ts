@@ -147,7 +147,7 @@ describe('GestureRecognizer', () => {
     ]);
   });
 
-  describe('setOptions() ', () => {
+  describe('setOptions()', () => {
     interface TestCase {
       optionPath: [keyof GestureRecognizerOptions, ...string[]];
       fieldPath: string[];
@@ -248,6 +248,14 @@ describe('GestureRecognizer', () => {
             gestureRecognizer, [testCase.fieldPath, testCase.defaultValue]);
       });
     }
+  });
+
+  it('doesn\'t support region of interest', () => {
+    expect(() => {
+      gestureRecognizer.recognize(
+          {} as HTMLImageElement,
+          {regionOfInterest: {left: 0, right: 0, top: 0, bottom: 0}});
+    }).toThrowError('This task doesn\'t support region-of-interest.');
   });
 
   it('transforms results', async () => {

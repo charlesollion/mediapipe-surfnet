@@ -41,14 +41,14 @@ class VisionTaskRunnerFake extends VisionTaskRunner {
   expectedImageSource?: ImageSource;
   expectedNormalizedRect?: NormalizedRect;
 
-  constructor() {
+  constructor(roiAllowed = true) {
     super(
         jasmine.createSpyObj<VisionGraphRunner>([
           'addProtoToStream', 'addGpuBufferAsImageToStream',
           'setAutoRenderToScreen', 'registerModelResourcesGraphService',
           'finishProcessing'
         ]),
-        IMAGE_STREAM, NORM_RECT_STREAM);
+        IMAGE_STREAM, NORM_RECT_STREAM, roiAllowed);
 
     this.fakeGraphRunner =
         this.graphRunner as unknown as jasmine.SpyObj<VisionGraphRunner>;
@@ -71,6 +71,9 @@ class VisionTaskRunnerFake extends VisionTaskRunner {
           expect(timestamp).toBe(TIMESTAMP);
           expect(imageSource).toBe(this.expectedImageSource!);
         });
+
+    // SetOptions with a modelAssetBuffer runs synchonously
+    void this.setOptions({baseOptions: {modelAssetBuffer: new Uint8Array([])}});
   }
 
   protected override refreshGraph(): void {}
@@ -108,29 +111,27 @@ class VisionTaskRunnerFake extends VisionTaskRunner {
 }
 
 describe('VisionTaskRunner', () => {
-  let visionTaskRunner: VisionTaskRunnerFake;
-
-  beforeEach(async () => {
+  beforeEach(() => {
     addJasmineCustomFloatEqualityTester();
-    visionTaskRunner = new VisionTaskRunnerFake();
-    await visionTaskRunner.setOptions(
-        {baseOptions: {modelAssetBuffer: new Uint8Array([])}});
   });
 
   it('can enable image mode', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'image'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'IMAGE'});
     expect(visionTaskRunner.baseOptions.toObject())
         .toEqual(jasmine.objectContaining({useStreamMode: false}));
   });
 
   it('can enable video mode', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'video'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'VIDEO'});
     expect(visionTaskRunner.baseOptions.toObject())
         .toEqual(jasmine.objectContaining({useStreamMode: true}));
   });
 
   it('can clear running mode', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'video'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'VIDEO'});
 
     // Clear running mode
     await visionTaskRunner.setOptions(
@@ -140,7 +141,8 @@ describe('VisionTaskRunner', () => {
   });
 
   it('cannot process images with video mode', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'video'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'VIDEO'});
     expect(() => {
       visionTaskRunner.processImageData(
           IMAGE, /* imageProcessingOptions= */ undefined);
@@ -148,6 +150,7 @@ describe('VisionTaskRunner', () => {
   });
 
   it('cannot process video with image mode', async () => {
+    const visionTaskRunner = new VisionTaskRunnerFake();
     // Use default for `useStreamMode`
     expect(() => {
       visionTaskRunner.processVideoData(
@@ -155,7 +158,7 @@ describe('VisionTaskRunner', () => {
     }).toThrowError(/Task is not initialized with video mode./);
 
     // Explicitly set to image mode
-    await visionTaskRunner.setOptions({runningMode: 'image'});
+    await visionTaskRunner.setOptions({runningMode: 'IMAGE'});
     expect(() => {
       visionTaskRunner.processVideoData(
           IMAGE, /* imageProcessingOptions= */ undefined, TIMESTAMP);
@@ -163,7 +166,8 @@ describe('VisionTaskRunner', () => {
   });
 
   it('sends packets to graph', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'video'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'VIDEO'});
 
     visionTaskRunner.expectImage(IMAGE);
     visionTaskRunner.expectNormalizedRect(0.5, 0.5, 1, 1);
@@ -172,7 +176,8 @@ describe('VisionTaskRunner', () => {
   });
 
   it('sends packets to graph with image processing options', async () => {
-    await visionTaskRunner.setOptions({runningMode: 'video'});
+    const visionTaskRunner = new VisionTaskRunnerFake();
+    await visionTaskRunner.setOptions({runningMode: 'VIDEO'});
 
     visionTaskRunner.expectImage(IMAGE);
     visionTaskRunner.expectNormalizedRect(0.3, 0.6, 0.2, 0.4);
@@ -184,6 +189,7 @@ describe('VisionTaskRunner', () => {
 
   describe('validates processing options', () => {
     it('with left > right', () => {
+      const visionTaskRunner = new VisionTaskRunnerFake();
       expect(() => {
         visionTaskRunner.processImageData(IMAGE, {
           regionOfInterest: {
@@ -197,6 +203,7 @@ describe('VisionTaskRunner', () => {
     });
 
     it('with top > bottom', () => {
+      const visionTaskRunner = new VisionTaskRunnerFake();
       expect(() => {
         visionTaskRunner.processImageData(IMAGE, {
           regionOfInterest: {
@@ -210,6 +217,7 @@ describe('VisionTaskRunner', () => {
     });
 
     it('with out of range values', () => {
+      const visionTaskRunner = new VisionTaskRunnerFake();
       expect(() => {
         visionTaskRunner.processImageData(IMAGE, {
           regionOfInterest: {
@@ -222,7 +230,24 @@ describe('VisionTaskRunner', () => {
       }).toThrowError('Expected RectF values to be in [0,1].');
     });
 
+
+    it('without region of interest support', () => {
+      const visionTaskRunner =
+          new VisionTaskRunnerFake(/* roiAllowed= */ false);
+      expect(() => {
+        visionTaskRunner.processImageData(IMAGE, {
+          regionOfInterest: {
+            left: 0.1,
+            right: 0.2,
+            top: 0.1,
+            bottom: 0.2,
+          }
+        });
+      }).toThrowError('This task doesn\'t support region-of-interest.');
+    });
+
     it('with non-90 degree rotation', () => {
+      const visionTaskRunner = new VisionTaskRunnerFake();
       expect(() => {
         visionTaskRunner.processImageData(IMAGE, {rotationDegrees: 42});
       }).toThrowError('Expected rotation to be a multiple of 90°.');
