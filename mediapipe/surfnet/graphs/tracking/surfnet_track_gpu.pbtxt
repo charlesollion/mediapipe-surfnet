@@ -40,10 +40,23 @@ node {
 }
 
 # Transforms the input image on 640x640 image.
+node {
+  calculator: "ImageTransformationCalculator"
+  input_stream: "IMAGE_GPU:throttled_input_video"
+  output_stream: "IMAGE_GPU:scaled_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
+      output_width: 640
+      output_height: 640
+    }
+  }
+}
+
+# Transforms the input image on 640x640 image.
 # node {
 #   calculator: "ImageCroppingCalculator"
 #   input_stream: "IMAGE_GPU:throttled_input_video"
-#   output_stream: "IMAGE_GPU:scaled_video"
+#   output_stream: "IMAGE_GPU:cropped_video"
 #   node_options: {
 #     [type.googleapis.com/mediapipe.ImageCroppingCalculatorOptions] {
 #       norm_center_x: 0.5
@@ -56,17 +69,20 @@ node {
 
 
 # Transforms the input image on 640x640 image.
-node {
-  calculator: "ImageTransformationCalculator"
-  input_stream: "IMAGE_GPU:throttled_input_video"
-  output_stream: "IMAGE_GPU:scaled_video"
-  node_options: {
-    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
-      output_width: 640
-      output_height: 640
-    }
-  }
-}
+# node {
+#   calculator: "ImageTransformationCalculator"
+#   input_stream: "IMAGE_GPU:cropped_video"
+#   output_stream: "IMAGE_GPU:scaled_video"
+#   node_options: {
+#     [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
+#       output_width: 640
+#       output_height: 640
+#       flip_vertically: false
+#       flip_horizontally: false
+#     }
+#   }
+# }
+
 
 node {
   calculator: "TfLiteConverterCalculator"
@@ -169,8 +185,6 @@ node: {
     [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
       output_width: 240
       output_height: 320
-      # output_width: 640
-      # output_height: 640
     }
   }
 }
@@ -307,8 +321,6 @@ node: {
   }
 }
 
-
-
 # Converts the detections to drawing primitives for annotation overlay.
 node {
   calculator: "DetectionsToRenderDataCalculator"
@@ -330,29 +342,3 @@ node {
   input_stream: "render_data"
   output_stream: "IMAGE_GPU:output_video"
 }
-
-# Subgraph that detections objects (see object_detection_gpu.pbtxt).
-# node {
-#   calculator: "YoloGpu"
-#   # calculator: "ObjectDetectionSubgraphGpu"
-#   input_stream: "IMAGE:throttled_input_video"
-#   output_stream: "DETECTIONS:output_detections"
-# }
-
-# # Subgraph that tracks objects (see object_tracking_gpu.pbtxt).
-# #node {
-# #  calculator: "ObjectTrackingSubgraphGpu"
-# #  input_stream: "VIDEO:input_video"
-# #  input_stream: "DETECTIONS:output_detections"
-# #  output_stream: "DETECTIONS:tracked_detections"
-# #}
-
-# # Subgraph that renders annotations and overlays them on top of the input
-# # images (see renderer_gpu.pbtxt).
-# node {
-#   calculator: "RendererSubgraphGpu"
-#   input_stream: "IMAGE:input_video"
-#   # input_stream: "DETECTIONS:tracked_detections"
-#   input_stream: "DETECTIONS:output_detections"
-#   output_stream: "IMAGE:output_video"
-# }

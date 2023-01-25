@@ -26,10 +26,6 @@ cc_library(
     deps = [
         "//mediapipe/calculators/core:packet_resampler_calculator",
         "//mediapipe/calculators/core:flow_limiter_calculator",
-        # "//mediapipe/surfnet/graphs/tracking/subgraphs:yolo_gpu",
-        # "//mediapipe/surfnet/graphs/tracking/subgraphs:object_detection_gpu",
-        # "//mediapipe/surfnet/graphs/tracking/subgraphs:object_tracking_gpu",
-        # "//mediapipe/surfnet/graphs/tracking/subgraphs:renderer_gpu",
 
         "//mediapipe/calculators/image:image_transformation_calculator",
         "//mediapipe/calculators/image:image_cropping_calculator",
@@ -59,7 +55,6 @@ cc_library(
 mediapipe_binary_graph(
     name = "surfnet_track_graph",
     graph = "surfnet_track.pbtxt",
-    # graph = "dummy_webcam.pbtxt",
     output_name = "surfnet_track.binarypb",
     deps = [":mobile_calculators"],
 )
