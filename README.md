@@ -57,6 +57,8 @@ export GLOG_logtostderr=1
 bazel build -c opt --strip=ALWAYS     --host_crosstool_top=@bazel_tools//tools/cpp:toolchain     --fat_apk_cpu=arm64-v8a,x86_64     --legacy_whole_archive=0     --features=-legacy_whole_archive     --copt=-fvisibility=hidden     --copt=-ffunction-sections     --copt=-fdata-sections     --copt=-fstack-protector     --copt=-Oz     --copt=-fomit-frame-pointer     --copt=-DABSL_MIN_LOG_LEVEL=2     --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 --linkopt=-Wl,--gc-sections,--strip-all     mediapipe/surfnet/android/src/java/com/google/mediapipe/apps/surfnetaar:surfnettrack
 ```
 
+`linkstatic=1`
+
 Building the graph
 ```sh
 bazel build -c opt --strip=ALWAYS     --host_crosstool_top=@bazel_tools//tools/cpp:toolchain     --fat_apk_cpu=arm64-v8a,x86_64     --legacy_whole_archive=0     --features=-legacy_whole_archive     --copt=-fvisibility=hidden     --copt=-ffunction-sections     --copt=-fdata-sections     --copt=-fstack-protector     --copt=-Oz     --copt=-fomit-frame-pointer     --copt=-DABSL_MIN_LOG_LEVEL=2     --copt -DMESA_EGL_NO_X11_HEADERS --copt -DEGL_NO_X11 --linkopt=-Wl,--gc-sections,--strip-all mediapipe/surfnet/graphs/tracking:surfnet_track_graph

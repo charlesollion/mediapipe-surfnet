@@ -194,16 +194,11 @@ absl::Status TfLiteYoloTensorsToDetectionsCalculator::Process(
 
   MP_RETURN_IF_ERROR(DecodeTensor(float_data, &boxes, &scores, &classes));
 
-  std::cerr<<"finished decoding nb boxes: " << boxes.size() / 4 << std::endl;
-  // if(boxes.size() > 2) {
-  //   std::cerr<< scores[0] << ", " << scores[1] << ", " << scores[2] << std::endl;
-  //   std::cerr<< classes[0] << ", " << classes[1] << ", " << classes[2] << std::endl;
-  // }
   std::vector<Detection> output_detections;
 
   MP_RETURN_IF_ERROR(ConvertToDetections(boxes.data(), scores.data(), classes.data(), scores.size(), &output_detections));
 
-  std::cerr << "finished converting, found detections: " << output_detections.size() << std::endl;
+  LOG(INFO) << "finished detection, num boxes before NMS: " << output_detections.size();
   
   // Output
   if (cc->Outputs().HasTag("DETECTIONS")) {

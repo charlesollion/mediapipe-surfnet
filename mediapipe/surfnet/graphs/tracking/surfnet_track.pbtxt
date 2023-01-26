@@ -38,7 +38,6 @@ node {
   output_stream: "throttled_input_video"
 }
 
-
 # Transforms the input image on 640x640 image.
 node {
   calculator: "ImageTransformationCalculator"
@@ -56,6 +55,11 @@ node {
   calculator: "TfLiteConverterCalculator"
   input_stream: "IMAGE_GPU:scaled_video"
   output_stream: "TENSORS_GPU:image_tensor"
+  node_options: {
+      [type.googleapis.com/mediapipe.TfLiteConverterCalculatorOptions] {
+      zero_center: false
+    }
+  }
 }
 
 node {
@@ -64,15 +68,13 @@ node {
   output_stream: "TENSORS:detection_tensors"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      #model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
-      # model_path: "mediapipe/surfnet/models/yolo_surfnet_fix.tflite"
       model_path: "mediapipe/surfnet/models/yolo_pau-fp16.tflite"
+      #model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
       delegate: { 
         gpu { 
           use_advanced_gpu_api: true
           allow_precision_loss: true
         }
-      #   # tflite {}
       }
     }
   }
@@ -85,11 +87,10 @@ node {
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
       num_coords: 17
-      # 17
       # 85 for standard yolo = num classes + 5 
       max_detections: 100
       num_boxes: 25200
-      min_conf_thresh: 0.15
+      min_conf_thresh: 0.35
       flip_vertically: false
       reverse_output_order: true
       # ignore_classes: [9]
@@ -148,8 +149,6 @@ node: {
     [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
       output_width: 240
       output_height: 320
-      # output_width: 640
-      # output_height: 640
     }
   }
 }
@@ -286,8 +285,6 @@ node: {
   }
 }
 
-
-
 # Converts the detections to drawing primitives for annotation overlay.
 node {
   calculator: "DetectionsToRenderDataCalculator"
@@ -309,29 +306,3 @@ node {
   input_stream: "render_data"
   output_stream: "IMAGE_GPU:output_video"
 }
-
-# Subgraph that detections objects (see object_detection_gpu.pbtxt).
-# node {
-#   calculator: "YoloGpu"
-#   # calculator: "ObjectDetectionSubgraphGpu"
-#   input_stream: "IMAGE:throttled_input_video"
-#   output_stream: "DETECTIONS:output_detections"
-# }
-
-# # Subgraph that tracks objects (see object_tracking_gpu.pbtxt).
-# #node {
-# #  calculator: "ObjectTrackingSubgraphGpu"
-# #  input_stream: "VIDEO:input_video"
-# #  input_stream: "DETECTIONS:output_detections"
-# #  output_stream: "DETECTIONS:tracked_detections"
-# #}
-
-# # Subgraph that renders annotations and overlays them on top of the input
-# # images (see renderer_gpu.pbtxt).
-# node {
-#   calculator: "RendererSubgraphGpu"
-#   input_stream: "IMAGE:input_video"
-#   # input_stream: "DETECTIONS:tracked_detections"
-#   input_stream: "DETECTIONS:output_detections"
-#   output_stream: "IMAGE:output_video"
-# }

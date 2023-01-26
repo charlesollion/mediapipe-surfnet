@@ -37,10 +37,12 @@ cc_library(
 
         "//mediapipe/calculators/video:box_tracker_calculator",
         "//mediapipe/calculators/video:flow_packager_calculator",
+        "//mediapipe/calculators/video:flow_to_image_calculator",
         "//mediapipe/calculators/video:motion_analysis_calculator",
         "//mediapipe/framework/stream_handler:immediate_input_stream_handler",
         "//mediapipe/framework/stream_handler:sync_set_input_stream_handler",
         "//mediapipe/gpu:gpu_buffer_to_image_frame_calculator",
+        "//mediapipe/gpu:image_frame_to_gpu_buffer_calculator",
 
         "//mediapipe/calculators/util:detection_unique_id_calculator",
         "//mediapipe/calculators/util:detections_to_timed_box_list_calculator",
@@ -49,6 +51,11 @@ cc_library(
         "//mediapipe/calculators/util:annotation_overlay_calculator",
         "//mediapipe/calculators/util:detections_to_render_data_calculator",
         "//mediapipe/calculators/util:rect_to_render_data_calculator",
+
+        # "//mediapipe/calculators/core:packet_inner_join_calculator",
+        # "//mediapipe/calculators/core:previous_loopback_calculator",
+        # "//mediapipe/calculators/core:sequence_shift_calculator",
+        # "//mediapipe/calculators/video:tvl1_optical_flow_calculator",
     ],
 )
 
@@ -56,5 +63,12 @@ mediapipe_binary_graph(
     name = "surfnet_track_graph",
     graph = "surfnet_track.pbtxt",
     output_name = "surfnet_track.binarypb",
+    deps = [":mobile_calculators"],
+)
+
+mediapipe_binary_graph(
+    name = "surfnet_track_graph_gpu4",
+    graph = "surfnet_track_gpu4.pbtxt",
+    output_name = "surfnet_track4.binarypb",
     deps = [":mobile_calculators"],
 )

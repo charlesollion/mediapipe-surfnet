@@ -6,7 +6,6 @@ profiler_config {
   trace_enabled: true
   enable_profiler: true
   trace_log_interval_count: 50
-  trace_log_path: "/tmp/mediapipe/"
 }
 
 
@@ -40,48 +39,48 @@ node {
 }
 
 # Transforms the input image on 640x640 image.
-node {
-  calculator: "ImageTransformationCalculator"
-  input_stream: "IMAGE_GPU:throttled_input_video"
-  output_stream: "IMAGE_GPU:scaled_video"
-  node_options: {
-    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
-      output_width: 640
-      output_height: 640
-    }
-  }
-}
-
-# Transforms the input image on 640x640 image.
-# node {
-#   calculator: "ImageCroppingCalculator"
-#   input_stream: "IMAGE_GPU:throttled_input_video"
-#   output_stream: "IMAGE_GPU:cropped_video"
-#   node_options: {
-#     [type.googleapis.com/mediapipe.ImageCroppingCalculatorOptions] {
-#       norm_center_x: 0.5
-#       norm_center_y: 0.5
-#       width: 640
-#       height: 640
-#     }
-#   }
-# }
-
-
-# Transforms the input image on 640x640 image.
 # node {
 #   calculator: "ImageTransformationCalculator"
-#   input_stream: "IMAGE_GPU:cropped_video"
+#   input_stream: "IMAGE_GPU:throttled_input_video"
 #   output_stream: "IMAGE_GPU:scaled_video"
 #   node_options: {
 #     [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
 #       output_width: 640
 #       output_height: 640
-#       flip_vertically: false
-#       flip_horizontally: false
 #     }
 #   }
 # }
+
+# Transforms the input image on 640x640 image.
+node {
+  calculator: "ImageCroppingCalculator"
+  input_stream: "IMAGE_GPU:throttled_input_video"
+  output_stream: "IMAGE_GPU:cropped_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.ImageCroppingCalculatorOptions] {
+      norm_center_x: 0.5
+      norm_center_y: 0.5
+      width: 1080
+      height: 1080
+    }
+  }
+}
+
+
+# Transforms the input image on 640x640 image.
+node {
+  calculator: "ImageTransformationCalculator"
+  input_stream: "IMAGE_GPU:cropped_video"
+  output_stream: "IMAGE_GPU:scaled_video"
+  node_options: {
+    [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
+      output_width: 640
+      output_height: 640
+      flip_vertically: false
+      flip_horizontally: false
+    }
+  }
+}
 
 
 node {
@@ -101,16 +100,14 @@ node {
   output_stream: "TENSORS:detection_tensors"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteInferenceCalculatorOptions] {
-      # model_path: "mediapipe/surfnet/models/yolo_surfnet_fix.tflite"
-      model_path: "mediapipe/surfnet/models/yolo_pau-fp16.tflite"
-      #model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
-      #model_path: "mediapipe/surfnet/models/yolo_surfnet-fp16.tflite"
+      # model_path: "mediapipe/surfnet/models/yolo_pau-fp16.tflite"
+      model_path: "mediapipe/surfnet/models/yolo_surfnet-fp16.tflite"
+      # model_path: "mediapipe/surfnet/models/yolov5s-fp16-optimize.tflite"
       delegate: { 
         gpu { 
           use_advanced_gpu_api: true
           allow_precision_loss: true
         }
-        #tflite {}
       }
     }
   }
@@ -122,7 +119,7 @@ node {
   output_stream: "DETECTIONS:detections"
   node_options: {
     [type.googleapis.com/mediapipe.TfLiteYoloTensorsToDetectionsCalculatorOptions] {
-      num_coords: 15
+      num_coords: 17
       # 85 for standard yolo = num classes + 5 
       max_detections: 100
       num_boxes: 25200
@@ -179,12 +176,12 @@ node {
 
 node: {
   calculator: "ImageTransformationCalculator"
-  input_stream: "IMAGE_GPU:input_video"
+  input_stream: "IMAGE_GPU:cropped_video"
   output_stream: "IMAGE_GPU:downscaled_input_video"
   node_options: {
     [type.googleapis.com/mediapipe.ImageTransformationCalculatorOptions] {
-      output_width: 240
-      output_height: 320
+      output_width: 640
+      output_height: 640
     }
   }
 }
@@ -195,6 +192,50 @@ node: {
   input_stream: "downscaled_input_video"
   output_stream: "downscaled_input_video_cpu"
 }
+
+####
+#### Try to visualize the flow (not working)
+####
+
+# # Join the original input stream and the one that is shifted by one packet.
+# node: {
+#   calculator: "PacketInnerJoinCalculator"
+#   input_stream: "downscaled_input_video_cpu"
+#   input_stream: "prev_output"
+#   output_stream: "first_frames"
+#   output_stream: "second_frames"
+# }
+
+# # Compute the forward optical flow.
+# node {
+#   calculator: "Tvl1OpticalFlowCalculator"
+#   input_stream: "FIRST_FRAME:first_frames"
+#   input_stream: "SECOND_FRAME:second_frames"
+#   output_stream: "FORWARD_FLOW:forward_flow"
+#   max_in_flight: 10
+# }
+
+# # Convert an optical flow to be an image frame with 2 channels (v_x and v_y),
+# # each channel is quantized to 0-255.
+# node: {
+#   calculator: "FlowToImageCalculator"
+#   input_stream: "forward_flow"
+#   output_stream: "flow_frames"
+#   node_options: {
+#     [type.googleapis.com/mediapipe.FlowToImageCalculatorOptions]: {
+#       min_value: -20.0
+#       max_value: 20.0
+#     }
+#   }
+# }
+# 
+# node: {
+#   calculator: "ImageFrameToGpuBufferCalculator"
+#   input_stream: "flow_frames"
+#   output_stream: "output_video"
+# }
+
+#### 
 
 # Performs motion analysis on an incoming video stream.
 node: {
@@ -229,10 +270,8 @@ node: {
   }
 }
 
-# Reads optical flow fields defined in
-# mediapipe/framework/formats/motion/optical_flow_field.h,
-# returns a VideoFrame with 2 channels (v_x and v_y), each channel is quantized
-# to 0-255.
+
+# Packages camera motion and flow in region data. Does not seem to work well
 node: {
   calculator: "FlowPackagerCalculator"
   input_stream: "FLOW:region_flow"
@@ -248,10 +287,12 @@ node: {
   }
 }
 
-# Tracks box positions over time.
+
+# # Tracks box positions over time.
 node: {
   calculator: "BoxTrackerCalculator"
   input_stream: "TRACKING:tracking_data"
+  # input_stream: "VIDEO:downscaled_input_video_cpu"
   input_stream: "TRACK_TIME:input_video"
   input_stream: "START_POS:start_pos"
   input_stream: "CANCEL_OBJECT_ID:cancel_object_id"
@@ -260,6 +301,7 @@ node: {
     back_edge: true
   }
   output_stream: "BOXES:boxes"
+  # output_stream: "VIZ:cpu_output_viz"
 
   input_stream_handler {
     input_stream_handler: "SyncSetInputStreamHandler"
@@ -290,15 +332,18 @@ node: {
         }
       }
       visualize_tracking_data: false
+      # visualize_state: true
+      # visualize_internal_state: true
+
       streaming_track_data_cache_size: 100
     }
   }
 }
 
 
-# Managers new detected objects and objects that are being tracked.
-# It associates the duplicated detections and updates the locations of
-# detections from tracking.
+# # Managers new detected objects and objects that are being tracked.
+# # It associates the duplicated detections and updates the locations of
+# # detections from tracking.
 node: {
   calculator: "TrackedDetectionManagerCalculator"
   input_stream: "DETECTIONS:detections_with_id"
@@ -338,7 +383,7 @@ node {
 # Draws annotations and overlays them on top of the input images.
 node {
   calculator: "AnnotationOverlayCalculator"
-  input_stream: "IMAGE_GPU:throttled_input_video"
+  input_stream: "IMAGE_GPU:cropped_video"
   input_stream: "render_data"
   output_stream: "IMAGE_GPU:output_video"
 }
