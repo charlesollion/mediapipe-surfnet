@@ -213,7 +213,7 @@ cc_library(
         "//conditions:default": [
         ],
         "//mediapipe:android": [],
-        "//mediapipe:apple": [],
+        "//mediapipe:ios": [],
     }),
     alwayslink = 1,
 )
@@ -485,4 +485,16 @@ cc_test(
         ],
         "//mediapipe/gpu:disable_gpu": [],
     }),
+)
+
+cc_library(
+    name = "frame_buffer",
+    srcs = ["frame_buffer.cc"],
+    hdrs = ["frame_buffer.h"],
+    deps = [
+        "//mediapipe/framework/port:integral_types",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
 )

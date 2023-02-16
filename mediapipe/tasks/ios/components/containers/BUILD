@@ -28,3 +28,16 @@ objc_library(
     hdrs = ["sources/MPPClassificationResult.h"],
     deps = [":MPPCategory"],
 )
+
+objc_library(
+    name = "MPPEmbedding",
+    srcs = ["sources/MPPEmbedding.m"],
+    hdrs = ["sources/MPPEmbedding.h"],
+)
+
+objc_library(
+    name = "MPPEmbeddingResult",
+    srcs = ["sources/MPPEmbeddingResult.m"],
+    hdrs = ["sources/MPPEmbeddingResult.h"],
+    deps = [":MPPEmbedding"],
+)

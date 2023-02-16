@@ -35,7 +35,7 @@ install --user six`.
 
     ```bash
     $ cd $HOME
-    $ git clone https://github.com/google/mediapipe.git
+    $ git clone --depth 1 https://github.com/google/mediapipe.git
 
     # Change directory into MediaPipe root directory
     $ cd mediapipe
@@ -287,7 +287,7 @@ build issues.
 2.  Checkout MediaPipe repository.
 
     ```bash
-    $ git clone https://github.com/google/mediapipe.git
+    $ git clone --depth 1 https://github.com/google/mediapipe.git
 
     # Change directory into MediaPipe root directory
     $ cd mediapipe
@@ -416,7 +416,7 @@ build issues.
 3.  Checkout MediaPipe repository.
 
     ```bash
-    $ git clone https://github.com/google/mediapipe.git
+    $ git clone --depth 1 https://github.com/google/mediapipe.git
 
     $ cd mediapipe
     ```
@@ -590,7 +590,7 @@ next section.
 7.  Checkout MediaPipe repository.
 
     ```
-    C:\Users\Username\mediapipe_repo> git clone https://github.com/google/mediapipe.git
+    C:\Users\Username\mediapipe_repo> git clone --depth 1 https://github.com/google/mediapipe.git
 
     # Change directory into MediaPipe root directory
     C:\Users\Username\mediapipe_repo> cd mediapipe
@@ -651,7 +651,7 @@ cameras. Alternatively, you use a video file as input.
 
 1.  Follow the
     [instruction](https://docs.microsoft.com/en-us/windows/wsl/install-win10) to
-    install Windows Sysystem for Linux (Ubuntu).
+    install Windows Subsystem for Linux (Ubuntu).
 
 2.  Install Windows ADB and start the ADB server in Windows.
 
@@ -680,7 +680,7 @@ cameras. Alternatively, you use a video file as input.
 6.  Checkout MediaPipe repository.
 
     ```bash
-    username@DESKTOP-TMVLBJ1:~$ git clone https://github.com/google/mediapipe.git
+    username@DESKTOP-TMVLBJ1:~$ git clone --depth 1 https://github.com/google/mediapipe.git
 
     username@DESKTOP-TMVLBJ1:~$ cd mediapipe
     ```
@@ -771,7 +771,7 @@ This will use a Docker image that will isolate mediapipe's installation from the
 2.  Build a docker image with tag "mediapipe".
 
     ```bash
-    $ git clone https://github.com/google/mediapipe.git
+    $ git clone --depth 1 https://github.com/google/mediapipe.git
     $ cd mediapipe
     $ docker build --tag=mediapipe .
 

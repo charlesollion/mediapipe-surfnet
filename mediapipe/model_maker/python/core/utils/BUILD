@@ -35,7 +35,6 @@ py_library(
     name = "model_util",
     srcs = ["model_util.py"],
     deps = [
-        ":file_util",
         ":quantization",
         "//mediapipe/model_maker/python/core/data:dataset",
     ],
@@ -45,7 +44,6 @@ py_test(
     name = "model_util_test",
     srcs = ["model_util_test.py"],
     deps = [
-        ":file_util",
         ":model_util",
         ":quantization",
         ":test_util",
@@ -61,6 +59,7 @@ py_test(
     name = "file_util_test",
     srcs = ["file_util_test.py"],
     data = ["//mediapipe/model_maker/python/core/utils/testdata"],
+    tags = ["requires-net:external"],
     deps = [":file_util"],
 )
 

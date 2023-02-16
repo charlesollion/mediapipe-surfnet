@@ -442,6 +442,33 @@ cc_library(
 )
 
 cc_library(
+    name = "frame_buffer_view",
+    hdrs = ["frame_buffer_view.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":gpu_buffer_storage",
+        "//mediapipe/framework/formats:frame_buffer",
+    ],
+)
+
+cc_library(
+    name = "gpu_buffer_storage_yuv_image",
+    srcs = ["gpu_buffer_storage_yuv_image.cc"],
+    hdrs = ["gpu_buffer_storage_yuv_image.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":frame_buffer_view",
+        ":gpu_buffer_format",
+        ":gpu_buffer_storage",
+        "//mediapipe/framework/formats:frame_buffer",
+        "//mediapipe/framework/formats:yuv_image",
+        "//third_party/libyuv",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+    ],
+)
+
+cc_library(
     name = "gpu_buffer_storage_ahwb",
     srcs = ["gpu_buffer_storage_ahwb.cc"],
     hdrs = ["gpu_buffer_storage_ahwb.h"],
@@ -522,19 +549,11 @@ objc_library(
     ],
 )
 
-proto_library(
+mediapipe_proto_library(
     name = "gl_context_options_proto",
     srcs = ["gl_context_options.proto"],
     visibility = ["//visibility:public"],
     deps = ["//mediapipe/framework:calculator_proto"],
-)
-
-mediapipe_cc_proto_library(
-    name = "gl_context_options_cc_proto",
-    srcs = ["gl_context_options.proto"],
-    cc_deps = ["//mediapipe/framework:calculator_cc_proto"],
-    visibility = ["//visibility:public"],
-    deps = [":gl_context_options_proto"],
 )
 
 # This is a hack needed to work around some issues with strict hdrs_check.
@@ -902,6 +921,17 @@ cc_library(
     alwayslink = 1,
 )
 
+### Simple calculators
+
+mediapipe_proto_library(
+    name = "gl_animation_overlay_calculator_proto",
+    srcs = ["gl_animation_overlay_calculator.proto"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
 proto_library(
     name = "gl_scaler_calculator_proto",
     srcs = ["gl_scaler_calculator.proto"],
@@ -1173,6 +1203,20 @@ mediapipe_cc_test(
     deps = [
         ":gpu_buffer_format",
         ":gpu_buffer_storage_ahwb",
+        "//mediapipe/framework/port:gtest_main",
+    ],
+)
+
+mediapipe_cc_test(
+    name = "gpu_buffer_storage_yuv_image_test",
+    size = "small",
+    srcs = ["gpu_buffer_storage_yuv_image_test.cc"],
+    exclude_platforms = [
+        "ios",
+    ],
+    deps = [
+        ":gpu_buffer_format",
+        ":gpu_buffer_storage_yuv_image",
         "//mediapipe/framework/port:gtest_main",
     ],
 )

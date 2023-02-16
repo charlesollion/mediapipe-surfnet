@@ -67,6 +67,8 @@ absl::StatusOr<std::string> GetCalculatorNameFromModelType(
       return "RegexPreprocessorCalculator";
     case TextModelType::STRING_MODEL:
       return "TextToTensorCalculator";
+    case TextModelType::USE_MODEL:
+      return "UniversalSentenceEncoderPreprocessorCalculator";
   }
 }
 
@@ -129,7 +131,8 @@ absl::Status ConfigureTextPreprocessingGraph(
   options.set_model_type(model_type);
   switch (model_type) {
     case TextModelType::UNSPECIFIED_MODEL:
-    case TextModelType::STRING_MODEL: {
+    case TextModelType::STRING_MODEL:
+    case TextModelType::USE_MODEL: {
       break;
     }
     case TextModelType::BERT_MODEL:
@@ -187,6 +190,11 @@ class TextPreprocessingGraph : public mediapipe::Subgraph {
     switch (options.model_type()) {
       case TextModelType::UNSPECIFIED_MODEL:
       case TextModelType::STRING_MODEL: {
+        break;
+      }
+      case TextModelType::USE_MODEL: {
+        metadata_extractor_in >>
+            text_preprocessor.SideIn(kMetadataExtractorTag);
         break;
       }
       case TextModelType::BERT_MODEL: {
