@@ -26,6 +26,14 @@ source ~/.bashrc
 sudo apt-get install openjdk-11-jdk
 ```
 
+#### Preparing the model
+
+We use [yolov5](https://github.com/ultralytics/yolov5) for the model. From the trained weights `surfnet.pt`, you may follow [instructions](https://github.com/ultralytics/yolov5/issues/251) to exports the weights to `.tflite`
+
+```sh
+python export.py --weights surfnet.pt --include tflite
+```
+
 ## Building 
 
 There are several ways to run the app:
@@ -76,4 +84,5 @@ bazel build -c opt --strip=ALWAYS     --host_crosstool_top=@bazel_tools//tools/c
 
 copy the graph (.binarypb), model (.tflite) and labelmap (.txt) to the asset folder.
 Make sure you have a compatible smartphone (need Android 10, OpenGL 3.1 minimum).
+Then clone the [android surfrider project](https://github.com/naia-science/surfnet_android)
 The android emulator doesn't work for now, hopefully in futre Mediapipe releases.

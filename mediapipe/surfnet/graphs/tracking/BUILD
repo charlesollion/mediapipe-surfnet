@@ -72,3 +72,24 @@ mediapipe_binary_graph(
     output_name = "surfnet_track4.binarypb",
     deps = [":mobile_calculators"],
 )
+
+mediapipe_binary_graph(
+    name = "surfnet_detection4",
+    graph = "surfnet_detection4.pbtxt",
+    output_name = "surfnet_detection4.binarypb",
+    deps = [":mobile_calculators"],
+)
+
+mediapipe_binary_graph(
+    name = "surfnet_detection_landscape",
+    graph = "surfnet_detection_landscape.pbtxt",
+    output_name = "surfnet_detection_landscape.binarypb",
+    deps = [":mobile_calculators"],
+)
+
+mediapipe_binary_graph(
+    name = "surfnet_detection_coco",
+    graph = "surfnet_detection_coco.pbtxt",
+    output_name = "surfnet_detection_coco.binarypb",
+    deps = [":mobile_calculators"],
+)

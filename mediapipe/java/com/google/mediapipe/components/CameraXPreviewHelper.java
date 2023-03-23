@@ -238,8 +238,9 @@ public class CameraXPreviewHelper extends CameraHelper {
     // "Express the resolution Size in the coordinate frame after rotating the supported sizes by
     // the target rotation."
     // Since we only support portrait orientation, we unconditionally transpose width and height.
-    Size rotatedSize =
-        new Size(/* width= */ targetSize.getHeight(), /* height= */ targetSize.getWidth());
+    Size rotatedSize = targetSize;
+    // FIX: to support landscape orientation
+    // new Size(/* width= */ targetSize.getHeight(), /* height= */ targetSize.getWidth());
 
     cameraProviderFuture.addListener(
         () -> {
@@ -459,7 +460,7 @@ public class CameraXPreviewHelper extends CameraHelper {
   }
 
   public Size getFrameSize() {
-    return frameSize;
+    return frameSize; 
   }
 
   private void updateCameraCharacteristics() {
