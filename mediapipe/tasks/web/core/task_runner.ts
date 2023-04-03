@@ -15,6 +15,7 @@
  */
 
 import {InferenceCalculatorOptions} from '../../../calculators/tensor/inference_calculator_pb';
+import {CalculatorGraphConfig} from '../../../framework/calculator_pb';
 import {Acceleration} from '../../../tasks/cc/core/proto/acceleration_pb';
 import {BaseOptions as BaseOptionsProto} from '../../../tasks/cc/core/proto/base_options_pb';
 import {ExternalFile} from '../../../tasks/cc/core/proto/external_file_pb';
@@ -29,6 +30,7 @@ const NO_ASSETS = undefined;
 
 // tslint:disable-next-line:enforce-name-casing
 const CachedGraphRunnerType = SupportModelResourcesGraphService(GraphRunner);
+
 /**
  * An implementation of the GraphRunner that exposes the resource graph
  * service.
@@ -41,7 +43,8 @@ export class CachedGraphRunner extends CachedGraphRunnerType {}
  * @return A fully instantiated instance of `T`.
  */
 export async function createTaskRunner<T extends TaskRunner>(
-    type: WasmMediaPipeConstructor<T>, initializeCanvas: boolean,
+    type: WasmMediaPipeConstructor<T>,
+    canvas: HTMLCanvasElement|OffscreenCanvas|null|undefined,
     fileset: WasmFileset, options: TaskRunnerOptions): Promise<T> {
   const fileLocator: FileLocator = {
     locateFile() {
@@ -50,12 +53,6 @@ export async function createTaskRunner<T extends TaskRunner>(
     }
   };
 
-  // Initialize a canvas if requested. If OffscreenCanvas is available, we
-  // let the graph runner initialize it by passing `undefined`.
-  const canvas = initializeCanvas ? (typeof OffscreenCanvas === 'undefined' ?
-                                         document.createElement('canvas') :
-                                         undefined) :
-                                    null;
   const instance = await createMediaPipeLib(
       type, fileset.wasmLoaderPath, NO_ASSETS, canvas, fileLocator);
   await instance.setOptions(options);
@@ -74,9 +71,10 @@ export abstract class TaskRunner {
    * @return A fully instantiated instance of `T`.
    */
   protected static async createInstance<T extends TaskRunner>(
-      type: WasmMediaPipeConstructor<T>, initializeCanvas: boolean,
+      type: WasmMediaPipeConstructor<T>,
+      canvas: HTMLCanvasElement|OffscreenCanvas|null|undefined,
       fileset: WasmFileset, options: TaskRunnerOptions): Promise<T> {
-    return createTaskRunner(type, initializeCanvas, fileset, options);
+    return createTaskRunner(type, canvas, fileset, options);
   }
 
   /** @hideconstructor protected */
@@ -116,21 +114,48 @@ export abstract class TaskRunner {
       // We don't use `await` here since we want to apply most settings
       // synchronously.
       return fetch(baseOptions.modelAssetPath.toString())
-          .then(response => response.arrayBuffer())
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Failed to fetch model: ${
+                  baseOptions.modelAssetPath} (${response.status})`);
+            } else {
+              return response.arrayBuffer();
+            }
+          })
           .then(buffer => {
             this.setExternalFile(new Uint8Array(buffer));
             this.refreshGraph();
+            this.onGraphRefreshed();
           });
     } else {
       // Apply the setting synchronously.
       this.setExternalFile(baseOptions.modelAssetBuffer);
       this.refreshGraph();
+      this.onGraphRefreshed();
       return Promise.resolve();
     }
   }
 
   /** Appliest the current options to the MediaPipe graph. */
   protected abstract refreshGraph(): void;
+
+  /**
+   * Callback that gets invoked once a new graph configuration has been
+   * applied.
+   */
+  protected onGraphRefreshed(): void {}
+
+  /** Returns the current CalculatorGraphConfig. */
+  protected getCalculatorGraphConfig(): CalculatorGraphConfig {
+    let config: CalculatorGraphConfig|undefined;
+    this.graphRunner.getCalculatorGraphConfig(binaryData => {
+      config = CalculatorGraphConfig.deserializeBinary(binaryData);
+    });
+    if (!config) {
+      throw new Error('Failed to retrieve CalculatorGraphConfig');
+    }
+    return config;
+  }
 
   /**
    * Takes the raw data from a MediaPipe graph, and passes it to C++ to be run
@@ -175,9 +200,13 @@ export abstract class TaskRunner {
         Math.max(this.latestOutputTimestamp, timestamp);
   }
 
-  /** Returns the latest output timestamp. */
-  protected getLatestOutputTimestamp() {
-    return this.latestOutputTimestamp;
+  /**
+   * Gets a syncthethic timestamp in ms that can be used to send data to the
+   * next packet. The timestamp is one millisecond past the last timestamp
+   * received from the graph.
+   */
+  protected getSynctheticTimestamp(): number {
+    return this.latestOutputTimestamp + 1;
   }
 
   /** Throws the error from the error listener if an error was raised. */
@@ -208,13 +237,23 @@ export abstract class TaskRunner {
 
   /** Configures the `acceleration` option. */
   private setAcceleration(options: BaseOptions) {
-    const acceleration =
-        this.baseOptions.getAcceleration() ?? new Acceleration();
-    if (options.delegate === 'GPU') {
-      acceleration.setGpu(new InferenceCalculatorOptions.Delegate.Gpu());
-    } else {
+    let acceleration = this.baseOptions.getAcceleration();
+
+    if (!acceleration) {
+      // Create default instance for the initial configuration.
+      acceleration = new Acceleration();
       acceleration.setTflite(new InferenceCalculatorOptions.Delegate.TfLite());
     }
+
+    if ('delegate' in options) {
+      if (options.delegate === 'GPU') {
+        acceleration.setGpu(new InferenceCalculatorOptions.Delegate.Gpu());
+      } else {
+        acceleration.setTflite(
+            new InferenceCalculatorOptions.Delegate.TfLite());
+      }
+    }
+
     this.baseOptions.setAcceleration(acceleration);
   }
 }

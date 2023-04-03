@@ -16,6 +16,7 @@
 import 'jasmine';
 
 // Placeholder for internal dependency on encodeByteArray
+import {InferenceCalculatorOptions} from '../../../calculators/tensor/inference_calculator_pb';
 import {BaseOptions as BaseOptionsProto} from '../../../tasks/cc/core/proto/base_options_pb';
 import {TaskRunner} from '../../../tasks/web/core/task_runner';
 import {ErrorListener} from '../../../web/graph_runner/graph_runner';
@@ -97,15 +98,35 @@ describe('TaskRunner', () => {
       tflite: {},
     },
   };
+  const mockBytesResultWithGpuDelegate = {
+    ...mockBytesResult,
+    acceleration: {
+      xnnpack: undefined,
+      gpu: {
+        useAdvancedGpuApi: false,
+        api: InferenceCalculatorOptions.Delegate.Gpu.Api.ANY,
+        allowPrecisionLoss: true,
+        cachedKernelPath: undefined,
+        serializedModelDir: undefined,
+        modelToken: undefined,
+        usage: InferenceCalculatorOptions.Delegate.Gpu.InferenceUsage
+                   .SUSTAINED_SPEED,
+      },
+      tflite: undefined,
+    },
+  };
 
   let fetchSpy: jasmine.Spy;
   let taskRunner: TaskRunnerFake;
+  let fetchStatus: number;
 
   beforeEach(() => {
+    fetchStatus = 200;
     fetchSpy = jasmine.createSpy().and.callFake(async url => {
-      expect(url).toEqual('foo');
       return {
         arrayBuffer: () => mockBytes.buffer,
+        ok: fetchStatus === 200,
+        status: fetchStatus,
       } as unknown as Response;
     });
     global.fetch = fetchSpy;
@@ -207,6 +228,14 @@ describe('TaskRunner', () => {
     return resolvedPromise;
   });
 
+  it('returns custom error if model download failed', () => {
+    fetchStatus = 404;
+    return expectAsync(taskRunner.setOptions({
+             baseOptions: {modelAssetPath: `notfound.tflite`}
+           }))
+        .toBeRejectedWithError('Failed to fetch model: notfound.tflite (404)');
+  });
+
   it('can enable CPU delegate', async () => {
     await taskRunner.setOptions({
       baseOptions: {
@@ -224,22 +253,8 @@ describe('TaskRunner', () => {
         delegate: 'GPU',
       }
     });
-    expect(taskRunner.baseOptions.toObject()).toEqual({
-      ...mockBytesResult,
-      acceleration: {
-        xnnpack: undefined,
-        gpu: {
-          useAdvancedGpuApi: false,
-          api: 0,
-          allowPrecisionLoss: true,
-          cachedKernelPath: undefined,
-          serializedModelDir: undefined,
-          modelToken: undefined,
-          usage: 2,
-        },
-        tflite: undefined,
-      },
-    });
+    expect(taskRunner.baseOptions.toObject())
+        .toEqual(mockBytesResultWithGpuDelegate);
   });
 
   it('can reset delegate', async () => {
@@ -249,8 +264,20 @@ describe('TaskRunner', () => {
         delegate: 'GPU',
       }
     });
-    // Clear backend
+    // Clear delegate
     await taskRunner.setOptions({baseOptions: {delegate: undefined}});
     expect(taskRunner.baseOptions.toObject()).toEqual(mockBytesResult);
+  });
+
+  it('keeps delegate if not provided', async () => {
+    await taskRunner.setOptions({
+      baseOptions: {
+        modelAssetBuffer: new Uint8Array(mockBytes),
+        delegate: 'GPU',
+      }
+    });
+    await taskRunner.setOptions({baseOptions: {}});
+    expect(taskRunner.baseOptions.toObject())
+        .toEqual(mockBytesResultWithGpuDelegate);
   });
 });

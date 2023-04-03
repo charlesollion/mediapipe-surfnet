@@ -77,7 +77,6 @@ mediapipe_proto_library(
     name = "calculator_graph_template_proto",
     srcs = ["calculator_graph_template.proto"],
     def_options_lib = False,
-    def_py_proto = False,
     visibility = ["//visibility:public"],
     deps = [
         "//mediapipe/framework:calculator_options_proto",
@@ -178,6 +177,20 @@ cc_library(
         "//mediapipe/framework:calculator_cc_proto",
         "//mediapipe/framework/port:any_proto",
         "//mediapipe/framework/port:status",
+    ],
+)
+
+cc_test(
+    name = "options_map_test",
+    srcs = ["options_map_test.cc"],
+    deps = [
+        ":options_map",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/port:gtest_main",
+        "//mediapipe/framework/port:parse_text_proto",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/framework/testdata:night_light_calculator_cc_proto",
+        "//mediapipe/framework/testdata:night_light_calculator_options_lib",
     ],
 )
 

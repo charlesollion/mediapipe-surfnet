@@ -16,9 +16,10 @@
 
 import {NormalizedRect} from '../../../../framework/formats/rect_pb';
 import {TaskRunner} from '../../../../tasks/web/core/task_runner';
+import {WasmFileset} from '../../../../tasks/web/core/wasm_fileset';
 import {ImageProcessingOptions} from '../../../../tasks/web/vision/core/image_processing_options';
-import {GraphRunner, ImageSource} from '../../../../web/graph_runner/graph_runner';
-import {SupportImage} from '../../../../web/graph_runner/graph_runner_image_lib';
+import {GraphRunner, ImageSource, WasmMediaPipeConstructor} from '../../../../web/graph_runner/graph_runner';
+import {SupportImage, WasmImage} from '../../../../web/graph_runner/graph_runner_image_lib';
 import {SupportModelResourcesGraphService} from '../../../../web/graph_runner/register_model_resources_graph_service';
 
 import {VisionTaskOptions} from './vision_task_options';
@@ -32,8 +33,33 @@ export class VisionGraphRunner extends GraphRunnerVisionType {}
 // The OSS JS API does not support the builder pattern.
 // tslint:disable:jspb-use-builder-pattern
 
+
+/**
+ * Creates a canvas for a MediaPipe vision task. Returns `undefined` if the
+ * GraphRunner should create its own canvas.
+ */
+function createCanvas(): HTMLCanvasElement|OffscreenCanvas|undefined {
+  // Returns an HTML canvas or `undefined` if OffscreenCanvas is available
+  // (since the graph runner can initialize its own OffscreenCanvas).
+  return typeof OffscreenCanvas === 'undefined' ?
+      document.createElement('canvas') :
+      undefined;
+}
+
 /** Base class for all MediaPipe Vision Tasks. */
 export abstract class VisionTaskRunner extends TaskRunner {
+  protected static async createVisionInstance<T extends VisionTaskRunner>(
+      type: WasmMediaPipeConstructor<T>, fileset: WasmFileset,
+      options: VisionTaskOptions): Promise<T> {
+    if (options.baseOptions?.delegate === 'GPU') {
+      if (!options.canvas) {
+        throw new Error('You must specify a canvas for GPU processing.');
+      }
+    }
+    const canvas = options.canvas ?? createCanvas();
+    return TaskRunner.createInstance(type, canvas, fileset, options);
+  }
+
   /**
    * Constructor to initialize a `VisionTaskRunner`.
    *
@@ -62,6 +88,13 @@ export abstract class VisionTaskRunner extends TaskRunner {
           !!options.runningMode && options.runningMode !== 'IMAGE';
       this.baseOptions.setUseStreamMode(useStreamMode);
     }
+
+    if (options.canvas !== undefined) {
+      if (this.graphRunner.wasmModule.canvas !== options.canvas) {
+        throw new Error('You must create a new task to reset the canvas.');
+      }
+    }
+
     return super.applyOptions(options);
   }
 
@@ -74,11 +107,7 @@ export abstract class VisionTaskRunner extends TaskRunner {
           'Task is not initialized with image mode. ' +
           '\'runningMode\' must be set to \'IMAGE\'.');
     }
-
-    // Increment the timestamp by 1 millisecond to guarantee that we send
-    // monotonically increasing timestamps to the graph.
-    const syntheticTimestamp = this.getLatestOutputTimestamp() + 1;
-    this.process(image, imageProcessingOptions, syntheticTimestamp);
+    this.process(image, imageProcessingOptions, this.getSynctheticTimestamp());
   }
 
   /** Sends a single video frame to the graph and awaits results. */
@@ -151,6 +180,31 @@ export abstract class VisionTaskRunner extends TaskRunner {
     this.graphRunner.addGpuBufferAsImageToStream(
         imageSource, this.imageStreamName, timestamp ?? performance.now());
     this.finishProcessing();
+  }
+
+  /** Converts the RGB or RGBA Uint8Array of a WasmImage to ImageData. */
+  protected convertToImageData(wasmImage: WasmImage): ImageData {
+    const {data, width, height} = wasmImage;
+    if (!(data instanceof Uint8ClampedArray)) {
+      throw new Error(
+          'Only Uint8ClampedArray-based images can be converted to ImageData');
+    }
+
+    if (data.length === width * height * 4) {
+      return new ImageData(data, width, height);
+    } else if (data.length === width * height * 3) {
+      const rgba = new Uint8ClampedArray(width * height * 4);
+      for (let i = 0; i < width * height; ++i) {
+        rgba[4 * i] = data[3 * i];
+        rgba[4 * i + 1] = data[3 * i + 1];
+        rgba[4 * i + 2] = data[3 * i + 2];
+        rgba[4 * i + 3] = 255;
+      }
+      return new ImageData(rgba, width, height);
+    } else {
+      throw new Error(
+          `Unsupported channel count: ${data.length / width / height}`);
+    }
   }
 }
 

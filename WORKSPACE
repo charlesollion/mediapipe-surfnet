@@ -54,6 +54,76 @@ load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependen
 
 rules_foreign_cc_dependencies()
 
+http_archive(
+    name = "com_google_protobuf",
+    sha256 = "87407cd28e7a9c95d9f61a098a53cf031109d451a7763e7dd1253abf8b4df422",
+    strip_prefix = "protobuf-3.19.1",
+    urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.1.tar.gz"],
+    patches = [
+        "@//third_party:com_google_protobuf_fixes.diff"
+    ],
+    patch_args = [
+        "-p1",
+    ],
+)
+
+# Load Zlib before initializing TensorFlow and the iOS build rules to guarantee
+# that the target @zlib//:mini_zlib is available
+http_archive(
+    name = "zlib",
+    build_file = "@//third_party:zlib.BUILD",
+    sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
+    strip_prefix = "zlib-1.2.11",
+    urls = [
+        "http://mirror.bazel.build/zlib.net/fossils/zlib-1.2.11.tar.gz",
+        "http://zlib.net/fossils/zlib-1.2.11.tar.gz",  # 2017-01-15
+    ],
+    patches = [
+        "@//third_party:zlib.diff",
+    ],
+    patch_args = [
+        "-p1",
+    ],
+)
+
+# iOS basic build deps.
+http_archive(
+    name = "build_bazel_rules_apple",
+    sha256 = "3e2c7ae0ddd181c4053b6491dad1d01ae29011bc322ca87eea45957c76d3a0c3",
+    url = "https://github.com/bazelbuild/rules_apple/releases/download/2.1.0/rules_apple.2.1.0.tar.gz",
+    patches = [
+        # Bypass checking ios unit test runner when building MP ios applications.
+        "@//third_party:build_bazel_rules_apple_bypass_test_runner_check.diff"
+    ],
+    patch_args = [
+        "-p1",
+    ],
+)
+
+load(
+    "@build_bazel_rules_apple//apple:repositories.bzl",
+    "apple_rules_dependencies",
+)
+apple_rules_dependencies()
+
+load(
+    "@build_bazel_rules_swift//swift:repositories.bzl",
+    "swift_rules_dependencies",
+)
+swift_rules_dependencies()
+
+load(
+    "@build_bazel_rules_swift//swift:extras.bzl",
+    "swift_rules_extra_dependencies",
+)
+swift_rules_extra_dependencies()
+
+load(
+    "@build_bazel_apple_support//lib:repositories.bzl",
+    "apple_support_dependencies",
+)
+apple_support_dependencies()
+
 # This is used to select all contents of the archives for CMake-based packages to give CMake access to them.
 all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
 
@@ -133,20 +203,7 @@ http_archive(
     urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.1.tar.gz"],
 )
 
-http_archive(
-    name = "com_google_protobuf",
-    sha256 = "87407cd28e7a9c95d9f61a098a53cf031109d451a7763e7dd1253abf8b4df422",
-    strip_prefix = "protobuf-3.19.1",
-    urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.19.1.tar.gz"],
-    patches = [
-        "@//third_party:com_google_protobuf_fixes.diff"
-    ],
-    patch_args = [
-        "-p1",
-    ],
-)
-
-load("//third_party/flatbuffers:workspace.bzl", flatbuffers = "repo")
+load("@//third_party/flatbuffers:workspace.bzl", flatbuffers = "repo")
 flatbuffers()
 
 http_archive(
@@ -173,7 +230,7 @@ http_archive(
         "https://github.com/google/sentencepiece/archive/1.0.0.zip",
     ],
     patches = [
-        "//third_party:com_google_sentencepiece_no_gflag_no_gtest.diff",
+        "@//third_party:com_google_sentencepiece_no_gflag_no_gtest.diff",
     ],
     patch_args = ["-p1"],
     repo_mapping = {"@com_google_glog" : "@com_github_glog_glog_no_gflags"},
@@ -187,8 +244,8 @@ http_archive(
         "https://github.com/tensorflow/text/archive/v2.2.0.zip",
     ],
     patches = [
-        "//third_party:tensorflow_text_remove_tf_deps.diff",
-        "//third_party:tensorflow_text_a0f49e63.diff",
+        "@//third_party:tensorflow_text_remove_tf_deps.diff",
+        "@//third_party:tensorflow_text_a0f49e63.diff",
     ],
     patch_args = ["-p1"],
     repo_mapping = {"@com_google_re2": "@com_googlesource_code_re2"},
@@ -270,7 +327,7 @@ new_local_repository(
     # For local MacOS builds, the path should point to an opencv@3 installation.
     # If you edit the path here, you will also need to update the corresponding
     # prefix in "opencv_macos.BUILD".
-    path = "/usr/local",
+    path = "/usr/local",  # e.g. /usr/local/Cellar for HomeBrew
 )
 
 new_local_repository(
@@ -318,63 +375,6 @@ http_archive(
         "-p1",
     ],
 )
-
-# Load Zlib before initializing TensorFlow and the iOS build rules to guarantee
-# that the target @zlib//:mini_zlib is available
-http_archive(
-    name = "zlib",
-    build_file = "//third_party:zlib.BUILD",
-    sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-    strip_prefix = "zlib-1.2.11",
-    urls = [
-        "http://mirror.bazel.build/zlib.net/fossils/zlib-1.2.11.tar.gz",
-        "http://zlib.net/fossils/zlib-1.2.11.tar.gz",  # 2017-01-15
-    ],
-    patches = [
-        "@//third_party:zlib.diff",
-    ],
-    patch_args = [
-        "-p1",
-    ],
-)
-
-# iOS basic build deps.
-http_archive(
-    name = "build_bazel_rules_apple",
-    sha256 = "f94e6dddf74739ef5cb30f000e13a2a613f6ebfa5e63588305a71fce8a8a9911",
-    url = "https://github.com/bazelbuild/rules_apple/releases/download/1.1.3/rules_apple.1.1.3.tar.gz",
-    patches = [
-        # Bypass checking ios unit test runner when building MP ios applications.
-        "@//third_party:build_bazel_rules_apple_bypass_test_runner_check.diff"
-    ],
-    patch_args = [
-        "-p1",
-    ],
-)
-
-load(
-    "@build_bazel_rules_apple//apple:repositories.bzl",
-    "apple_rules_dependencies",
-)
-apple_rules_dependencies()
-
-load(
-    "@build_bazel_rules_swift//swift:repositories.bzl",
-    "swift_rules_dependencies",
-)
-swift_rules_dependencies()
-
-load(
-    "@build_bazel_rules_swift//swift:extras.bzl",
-    "swift_rules_extra_dependencies",
-)
-swift_rules_extra_dependencies()
-
-load(
-    "@build_bazel_apple_support//lib:repositories.bzl",
-    "apple_support_dependencies",
-)
-apple_support_dependencies()
 
 # More iOS deps.
 
@@ -455,9 +455,9 @@ http_archive(
 )
 
 # TensorFlow repo should always go after the other external dependencies.
-# TF on 2023-02-02.
-_TENSORFLOW_GIT_COMMIT = "581840e12c7762a3deef66b25a549218ca1e3983"
-_TENSORFLOW_SHA256 = "27f8f51e34b5065ac5411332eb4ad02f1d954257036d4863810d0c394d044bc9"
+# TF on 2023-03-08.
+_TENSORFLOW_GIT_COMMIT = "24f7ee636d62e1f8d8330357f8bbd65956dfb84d"
+_TENSORFLOW_SHA256 = "7f8a96dd99215c0cdc77230d3dbce43e60102b64a89203ad04aa09b0a187a4bd"
 http_archive(
     name = "org_tensorflow",
     urls = [
@@ -499,8 +499,8 @@ cc_crosstool(name = "crosstool")
 # Node dependencies
 http_archive(
     name = "build_bazel_rules_nodejs",
-    sha256 = "5aae76dced38f784b58d9776e4ab12278bc156a9ed2b1d9fcd3e39921dc88fda",
-    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/5.7.1/rules_nodejs-5.7.1.tar.gz"],
+    sha256 = "94070eff79305be05b7699207fbac5d2608054dd53e6109f7d00d923919ff45a",
+    urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/5.8.2/rules_nodejs-5.8.2.tar.gz"],
 )
 
 load("@build_bazel_rules_nodejs//:repositories.bzl", "build_bazel_rules_nodejs_dependencies")
@@ -511,8 +511,8 @@ load("@build_bazel_rules_nodejs//:index.bzl", "node_repositories", "yarn_install
 node_repositories()
 yarn_install(
     name = "npm",
-    package_json = "//:package.json",
-    yarn_lock = "//:yarn.lock",
+    package_json = "@//:package.json",
+    yarn_lock = "@//:yarn.lock",
 )
 
 # Protobuf for Node dependencies
@@ -538,10 +538,50 @@ load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_
 rules_proto_dependencies()
 rules_proto_toolchains()
 
-load("//third_party:external_files.bzl", "external_files")
+load("@//third_party:external_files.bzl", "external_files")
 external_files()
 android_sdk_repository(name = "androidsdk", api_level=33, build_tools_version = "30.0.3")
 android_ndk_repository(name = "androidndk", api_level=21)
 
-load("//third_party:wasm_files.bzl", "wasm_files")
+load("@//third_party:wasm_files.bzl", "wasm_files")
 wasm_files()
+
+# Halide
+
+new_local_repository(
+    name = "halide",
+    build_file = "@//third_party/halide:BUILD.bazel",
+    path = "third_party/halide"
+)
+
+http_archive(
+    name = "linux_halide",
+    sha256 = "f62b2914823d6e33d18693f5b74484f274523bf5402ce51988e24393d123b375",
+    strip_prefix = "Halide-15.0.0-x86-64-linux",
+    urls = ["https://github.com/halide/Halide/releases/download/v15.0.0/Halide-15.0.0-x86-64-linux-d7651f4b32f9dbd764f243134001f7554378d62d.tar.gz"],
+    build_file = "@//third_party:halide.BUILD",
+)
+
+http_archive(
+    name = "macos_x86_64_halide",
+    sha256 = "3d832aed942080ea89aa832462c68fbb906f3055c440b7b6d35093d7c52f6aab",
+    strip_prefix = "Halide-15.0.0-x86-64-osx",
+    urls = ["https://github.com/halide/Halide/releases/download/v15.0.0/Halide-15.0.0-x86-64-osx-d7651f4b32f9dbd764f243134001f7554378d62d.tar.gz"],
+    build_file = "@//third_party:halide.BUILD",
+)
+
+http_archive(
+    name = "macos_arm_64_halide",
+    sha256 = "b1fad3c9810122b187303d7031d9e35fb43761f345d18cc4492c00ed5877f641",
+    strip_prefix = "Halide-15.0.0-arm-64-osx",
+    urls = ["https://github.com/halide/Halide/releases/download/v15.0.0/Halide-15.0.0-arm-64-osx-d7651f4b32f9dbd764f243134001f7554378d62d.tar.gz"],
+    build_file = "@//third_party:halide.BUILD",
+)
+
+http_archive(
+    name = "windows_halide",
+    sha256 = "5acf6fe161dd375856a2b43f4bb0a32815ba958b0585ee312c44e008aa7b0b64",
+    strip_prefix = "Halide-15.0.0-x86-64-windows",
+    urls = ["https://github.com/halide/Halide/releases/download/v15.0.0/Halide-15.0.0-x86-64-windows-d7651f4b32f9dbd764f243134001f7554378d62d.zip"],
+    build_file = "@//third_party:halide.BUILD",
+)

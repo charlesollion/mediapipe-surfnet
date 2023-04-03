@@ -26,7 +26,11 @@ using ::testing::MatchesRegex;
 
 TEST(MetadataParserTest, MatadataParserVersionIsWellFormed) {
   // Validates that the version is well-formed (x.y.z).
-  EXPECT_THAT(kMatadataParserVersion, MatchesRegex("[0-9]+\\.[0-9]+\\.[0-9]+"));
+#ifdef _WIN32
+  EXPECT_THAT(kMetadataParserVersion, MatchesRegex("\\d+\\.\\d+\\.\\d+"));
+#else
+  EXPECT_THAT(kMetadataParserVersion, MatchesRegex("[0-9]+\\.[0-9]+\\.[0-9]+"));
+#endif  // _WIN32
 }
 
 }  // namespace

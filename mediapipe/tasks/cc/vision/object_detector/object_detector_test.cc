@@ -39,6 +39,7 @@ limitations under the License.
 #include "mediapipe/tasks/cc/components/containers/rect.h"
 #include "mediapipe/tasks/cc/vision/core/image_processing_options.h"
 #include "mediapipe/tasks/cc/vision/core/running_mode.h"
+#include "mediapipe/tasks/cc/vision/utils/image_tensor_specs.h"
 #include "mediapipe/tasks/cc/vision/utils/image_utils.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/core/api/op_resolver.h"
@@ -107,31 +108,31 @@ std::vector<DetectionProto>
 GenerateMobileSsdNoImageResizingFullExpectedResults() {
   return {ParseTextProtoOrDie<DetectionProto>(R"pb(
             label: "cat"
-            score: 0.6328125
+            score: 0.6210937
             location_data {
               format: BOUNDING_BOX
-              bounding_box { xmin: 14 ymin: 197 width: 98 height: 99 }
+              bounding_box { xmin: 15 ymin: 197 width: 98 height: 99 }
             })pb"),
           ParseTextProtoOrDie<DetectionProto>(R"pb(
             label: "cat"
-            score: 0.59765625
+            score: 0.609375
             location_data {
               format: BOUNDING_BOX
-              bounding_box { xmin: 151 ymin: 78 width: 104 height: 223 }
+              bounding_box { xmin: 150 ymin: 78 width: 104 height: 223 }
             })pb"),
           ParseTextProtoOrDie<DetectionProto>(R"pb(
             label: "cat"
             score: 0.5
             location_data {
               format: BOUNDING_BOX
-              bounding_box { xmin: 65 ymin: 199 width: 41 height: 101 }
+              bounding_box { xmin: 64 ymin: 199 width: 42 height: 101 }
             })pb"),
           ParseTextProtoOrDie<DetectionProto>(R"pb(
             label: "dog"
-            score: 0.48828125
+            score: 0.5
             location_data {
               format: BOUNDING_BOX
-              bounding_box { xmin: 12 ymin: 110 width: 153 height: 193 }
+              bounding_box { xmin: 14 ymin: 110 width: 153 height: 193 }
             })pb")};
 }
 
@@ -267,7 +268,7 @@ TEST_F(CreateFromOptionsTest, FailsWithIllegalCallbackInImageOrVideoMode) {
     options->running_mode = running_mode;
     options->result_callback =
         [](absl::StatusOr<ObjectDetectorResult> detections, const Image& image,
-           int64 timestamp_ms) {};
+           int64_t timestamp_ms) {};
     absl::StatusOr<std::unique_ptr<ObjectDetector>> object_detector =
         ObjectDetector::Create(std::move(options));
     EXPECT_EQ(object_detector.status().code(),
@@ -296,6 +297,36 @@ TEST_F(CreateFromOptionsTest, FailsWithMissingCallbackInLiveStreamMode) {
   EXPECT_THAT(object_detector.status().GetPayload(kMediaPipeTasksPayload),
               Optional(absl::Cord(absl::StrCat(
                   MediaPipeTasksStatus::kInvalidTaskGraphConfigError))));
+}
+
+TEST_F(CreateFromOptionsTest, InputTensorSpecsForMobileSsdModel) {
+  auto options = std::make_unique<ObjectDetectorOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
+                          ObjectDetector::Create(std::move(options)));
+  MP_ASSERT_OK_AND_ASSIGN(auto image_tensor_specs,
+                          object_detector->GetInputImageTensorSpecs());
+  EXPECT_EQ(image_tensor_specs.image_width, 300);
+  EXPECT_EQ(image_tensor_specs.image_height, 300);
+  EXPECT_EQ(image_tensor_specs.color_space,
+            tflite::ColorSpaceType::ColorSpaceType_RGB);
+  EXPECT_EQ(image_tensor_specs.tensor_type, tflite::TensorType_UINT8);
+}
+
+TEST_F(CreateFromOptionsTest, InputTensorSpecsForEfficientDetModel) {
+  auto options = std::make_unique<ObjectDetectorOptions>();
+  options->base_options.model_asset_path =
+      JoinPath("./", kTestDataDirectory, kEfficientDetWithMetadata);
+  MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
+                          ObjectDetector::Create(std::move(options)));
+  MP_ASSERT_OK_AND_ASSIGN(auto image_tensor_specs,
+                          object_detector->GetInputImageTensorSpecs());
+  EXPECT_EQ(image_tensor_specs.image_width, 320);
+  EXPECT_EQ(image_tensor_specs.image_height, 320);
+  EXPECT_EQ(image_tensor_specs.color_space,
+            tflite::ColorSpaceType::ColorSpaceType_RGB);
+  EXPECT_EQ(image_tensor_specs.tensor_type, tflite::TensorType_UINT8);
 }
 
 // TODO: Add NumThreadsTest back after having an
@@ -350,28 +381,28 @@ TEST_F(ImageModeTest, Succeeds) {
              score: 0.69921875
              location_data {
                format: BOUNDING_BOX
-               bounding_box { xmin: 608 ymin: 161 width: 381 height: 439 }
+               bounding_box { xmin: 608 ymin: 164 width: 381 height: 432 }
              })pb"),
            ParseTextProtoOrDie<DetectionProto>(R"pb(
              label: "cat"
-             score: 0.64453125
+             score: 0.65625
              location_data {
                format: BOUNDING_BOX
-               bounding_box { xmin: 60 ymin: 398 width: 386 height: 196 }
+               bounding_box { xmin: 57 ymin: 398 width: 386 height: 196 }
              })pb"),
            ParseTextProtoOrDie<DetectionProto>(R"pb(
              label: "cat"
              score: 0.51171875
              location_data {
                format: BOUNDING_BOX
-               bounding_box { xmin: 256 ymin: 395 width: 173 height: 202 }
+               bounding_box { xmin: 256 ymin: 394 width: 173 height: 202 }
              })pb"),
            ParseTextProtoOrDie<DetectionProto>(R"pb(
              label: "cat"
              score: 0.48828125
              location_data {
                format: BOUNDING_BOX
-               bounding_box { xmin: 362 ymin: 191 width: 325 height: 419 }
+               bounding_box { xmin: 360 ymin: 195 width: 330 height: 412 }
              })pb")}));
 }
 
@@ -453,10 +484,10 @@ TEST_F(ImageModeTest, SucceedsWithScoreCalibration) {
       results,
       ConvertToDetectionResult({ParseTextProtoOrDie<DetectionProto>(R"pb(
         label: "cat"
-        score: 0.6531269142
+        score: 0.650467276
         location_data {
           format: BOUNDING_BOX
-          bounding_box { xmin: 14 ymin: 197 width: 98 height: 99 }
+          bounding_box { xmin: 15 ymin: 197 width: 98 height: 99 }
         })pb")}));
 }
 
@@ -476,9 +507,9 @@ TEST_F(ImageModeTest, SucceedsWithScoreThresholdOption) {
       GenerateMobileSsdNoImageResizingFullExpectedResults();
 
   ExpectApproximatelyEqual(
-      results, ConvertToDetectionResult({full_expected_results[0],
-                                         full_expected_results[1],
-                                         full_expected_results[2]}));
+      results, ConvertToDetectionResult(
+                   {full_expected_results[0], full_expected_results[1],
+                    full_expected_results[2], full_expected_results[3]}));
 }
 
 TEST_F(ImageModeTest, SucceedsWithMaxResultsOption) {
@@ -544,7 +575,6 @@ TEST_F(ImageModeTest, SucceedsWithRotation) {
                                                 "cats_and_dogs_rotated.jpg")));
   auto options = std::make_unique<ObjectDetectorOptions>();
   options->max_results = 1;
-  options->category_allowlist.push_back("cat");
   options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
@@ -558,10 +588,10 @@ TEST_F(ImageModeTest, SucceedsWithRotation) {
       results,
       ConvertToDetectionResult({ParseTextProtoOrDie<DetectionProto>(R"pb(
         label: "cat"
-        score: 0.7109375
+        score: 0.69921875
         location_data {
           format: BOUNDING_BOX
-          bounding_box { xmin: 0 ymin: 622 width: 436 height: 276 }
+          bounding_box { xmin: 0 ymin: 608 width: 439 height: 387 }
         })pb")}));
 }
 
@@ -654,7 +684,7 @@ TEST_F(LiveStreamModeTest, FailsWithCallingWrongMethod) {
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->running_mode = core::RunningMode::LIVE_STREAM;
   options->result_callback = [](absl::StatusOr<ObjectDetectorResult> detections,
-                                const Image& image, int64 timestamp_ms) {};
+                                const Image& image, int64_t timestamp_ms) {};
 
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
@@ -685,7 +715,7 @@ TEST_F(LiveStreamModeTest, FailsWithOutOfOrderInputTimestamps) {
   options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->result_callback = [](absl::StatusOr<ObjectDetectorResult> detections,
-                                const Image& image, int64 timestamp_ms) {};
+                                const Image& image, int64_t timestamp_ms) {};
   MP_ASSERT_OK_AND_ASSIGN(std::unique_ptr<ObjectDetector> object_detector,
                           ObjectDetector::Create(std::move(options)));
   MP_ASSERT_OK(object_detector->DetectAsync(image, 1));
@@ -711,13 +741,13 @@ TEST_F(LiveStreamModeTest, Succeeds) {
   options->running_mode = core::RunningMode::LIVE_STREAM;
   std::vector<ObjectDetectorResult> detection_results;
   std::vector<std::pair<int, int>> image_sizes;
-  std::vector<int64> timestamps;
+  std::vector<int64_t> timestamps;
   options->base_options.model_asset_path =
       JoinPath("./", kTestDataDirectory, kMobileSsdWithMetadata);
   options->result_callback =
       [&detection_results, &image_sizes, &timestamps](
           absl::StatusOr<ObjectDetectorResult> detections, const Image& image,
-          int64 timestamp_ms) {
+          int64_t timestamp_ms) {
         MP_ASSERT_OK(detections.status());
         detection_results.push_back(std::move(detections).value());
         image_sizes.push_back({image.width(), image.height()});
@@ -744,7 +774,7 @@ TEST_F(LiveStreamModeTest, Succeeds) {
     EXPECT_EQ(image_size.first, image.width());
     EXPECT_EQ(image_size.second, image.height());
   }
-  int64 timestamp_ms = -1;
+  int64_t timestamp_ms = -1;
   for (const auto& timestamp : timestamps) {
     EXPECT_GT(timestamp, timestamp_ms);
     timestamp_ms = timestamp;

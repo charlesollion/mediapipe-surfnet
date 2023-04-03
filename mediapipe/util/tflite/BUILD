@@ -30,10 +30,16 @@ cc_library(
     ],
 )
 
-cc_library(
+# TODO: Re-evaluate which of these libraries we can avoid making
+# cc_library_with_tflite and can be changed back to cc_library.
+cc_library_with_tflite(
     name = "cpu_op_resolver",
     srcs = ["cpu_op_resolver.cc"],
     hdrs = ["cpu_op_resolver.h"],
+    tflite_deps = [
+        "@org_tensorflow//tensorflow/lite:framework_stable",
+        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//mediapipe/framework/port:logging",
@@ -44,8 +50,6 @@ cc_library(
         "//mediapipe/util/tflite/operations:transform_tensor_bilinear",
         "//mediapipe/util/tflite/operations:transpose_conv_bias",
         "@org_tensorflow//tensorflow/lite:builtin_op_data",
-        "@org_tensorflow//tensorflow/lite:framework",
-        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
     # For using the symbol `MediaPipe_RegisterTfLiteOpResolver` in Python
     # with `tensorflow.lite.python.interpreter.InterpreterWithCustomOps`.
@@ -63,13 +67,17 @@ cc_library(
     ],
 )
 
-cc_library(
+# TODO: Re-evaluate which of these libraries we can avoid making
+# cc_library_with_tflite and can be changed back to cc_library.
+cc_library_with_tflite(
     name = "op_resolver",
     srcs = ["op_resolver.cc"],
     hdrs = ["op_resolver.h"],
+    tflite_deps = [
+        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
+    ],
     deps = [
         "@org_tensorflow//tensorflow/lite:builtin_op_data",
-        "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
     ],
 )
 
@@ -89,10 +97,10 @@ cc_library(
                "//mediapipe:ios": [],
                "//mediapipe:macos": [],
                "//conditions:default": [
-                   "@com_google_absl//absl/strings",
                    "//mediapipe/framework/port:ret_check",
                    "//mediapipe/framework/port:status",
                    "//mediapipe/framework/port:statusor",
+                   "@com_google_absl//absl/strings",
                    "@org_tensorflow//tensorflow/lite:framework",
                    "@org_tensorflow//tensorflow/lite/delegates/gpu:api",
                    "@org_tensorflow//tensorflow/lite/delegates/gpu/common:model",
@@ -106,8 +114,8 @@ cc_library(
                ],
                "//conditions:default": [],
            }) + [
-        "@com_google_absl//absl/status",
         "//mediapipe/framework:port",
+        "@com_google_absl//absl/status",
         "@org_tensorflow//tensorflow/lite/core/api",
     ],
 )

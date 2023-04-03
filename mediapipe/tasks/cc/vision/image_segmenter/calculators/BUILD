@@ -23,7 +23,6 @@ mediapipe_proto_library(
     srcs = ["tensors_to_segmentation_calculator.proto"],
     deps = [
         "//mediapipe/framework:calculator_options_proto",
-        "//mediapipe/framework:calculator_proto",
         "//mediapipe/framework/formats:image_format_proto",
         "//mediapipe/tasks/cc/vision/image_segmenter/proto:segmenter_options_proto",
         "//mediapipe/util:label_map_proto",
@@ -53,6 +52,27 @@ cc_library(
         "@com_google_absl//absl/types:span",
     ],
     alwayslink = 1,
+)
+
+cc_library(
+    name = "segmentation_postprocessor_gl",
+    srcs = ["segmentation_postprocessor_gl.cc"],
+    hdrs = ["segmentation_postprocessor_gl.h"],
+    tags = ["nomac"],
+    deps = [
+        ":tensors_to_segmentation_calculator_cc_proto",
+        "//mediapipe/framework:calculator_framework",
+        "//mediapipe/framework/formats:image",
+        "//mediapipe/framework/formats:tensor",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/gpu:gl_calculator_helper",
+        "//mediapipe/gpu:gl_simple_shaders",
+        "//mediapipe/gpu:shader_util",
+        "//mediapipe/tasks/cc/vision/image_segmenter/proto:segmenter_options_cc_proto",
+        "//mediapipe/tasks/cc/vision/utils:image_utils",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:str_format",
+    ],
 )
 
 cc_test(

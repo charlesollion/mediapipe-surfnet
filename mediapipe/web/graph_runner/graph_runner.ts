@@ -29,10 +29,23 @@ export type EmptyPacketListener = (timestamp: number) => void;
 
 /**
  * A listener that receives a single element of vector-returning output packet.
+ * Receives one element at a time (in order). Once all elements are processed,
+ * the listener is invoked with `data` set to `unknown` and `done` set to true.
  * Intended for internal usage.
  */
-export type VectorListener<T> =
-    (data: T, index: number, length: number, timestamp: number) => void;
+export type VectorListener<T> = (data: T, done: boolean, timestamp: number) =>
+    void;
+
+/**
+ * A listener that receives the CalculatorGraphConfig in binary encoding.
+ */
+export type CalculatorGraphConfigListener = (graphConfig: Uint8Array) => void;
+
+/**
+ * The name of the internal listener that we use to obtain the calculator graph
+ * config. Intended for internal usage. Exported for testing only.
+ */
+export const CALCULATOR_GRAPH_CONFIG_LISTENER_NAME = '__graph_config__';
 
 /**
  * Declarations for Emscripten's WebAssembly Module behavior, so TS compiler
@@ -80,6 +93,9 @@ export declare interface WasmModule {
   _addProtoToInputStream:
       (dataPtr: number, dataSize: number, protoNamePtr: number,
        streamNamePtr: number, timestamp: number) => void;
+  _addEmptyPacketToInputStream:
+      (streamNamePtr: number, timestamp: number) => void;
+
   // Input side packets
   _addBoolToInputSidePacket: (data: boolean, streamNamePtr: number) => void;
   _addDoubleToInputSidePacket: (data: number, streamNamePtr: number) => void;
@@ -118,6 +134,10 @@ export declare interface WasmModule {
       numSamples: number, streamNamePtr: number, timestamp: number) => void;
   _configureAudio: (channels: number, samples: number, sampleRate: number,
       streamNamePtr: number, headerNamePtr: number) => void;
+
+  // Get the graph configuration and invoke the listener configured under
+  // streamNamePtr
+  _getGraphConfig: (streamNamePtr: number, makeDeepCopy?: boolean) => void;
 
   // TODO: Refactor to just use a few numbers (perhaps refactor away
   //   from gl_graph_runner_internal.cc entirely to use something a little more
@@ -332,10 +352,15 @@ export class GraphRunner {
     } else {
       this.wasmModule._bindTextureToStream(streamNamePtr);
     }
-    const gl: any =
-        this.wasmModule.canvas.getContext('webgl2') ||
-        this.wasmModule.canvas.getContext('webgl');
-    console.assert(gl);
+    const gl =
+        (this.wasmModule.canvas.getContext('webgl2') ||
+         this.wasmModule.canvas.getContext('webgl')) as WebGL2RenderingContext |
+        WebGLRenderingContext | null;
+    if (!gl) {
+      throw new Error(
+          'Failed to obtain WebGL context from the provided canvas. ' +
+          '`getContext()` should only be invoked with `webgl` or `webgl2`.');
+    }
     gl.texImage2D(
         gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageSource);
 
@@ -433,6 +458,29 @@ export class GraphRunner {
   }
 
   /**
+   * Invokes the callback with the current calculator configuration (in binary
+   * format).
+   *
+   * Consumers must deserialize the binary representation themselves as this
+   * avoids addding a direct dependency on the Protobuf JSPB target in the graph
+   * library.
+   */
+  getCalculatorGraphConfig(
+      callback: CalculatorGraphConfigListener, makeDeepCopy?: boolean): void {
+    const listener = CALCULATOR_GRAPH_CONFIG_LISTENER_NAME;
+
+    // Create a short-lived listener to receive the binary encoded proto
+    this.setListener(listener, (data: Uint8Array) => {
+      callback(data);
+    });
+    this.wrapStringPtr(listener, (outputStreamNamePtr: number) => {
+      this.wasmModule._getGraphConfig(outputStreamNamePtr, makeDeepCopy);
+    });
+
+    delete this.wasmModule.simpleListeners![listener];
+  }
+
+  /**
    * Ensures existence of the simple listeners table and registers the callback.
    * Intended for internal usage.
    */
@@ -451,17 +499,12 @@ export class GraphRunner {
     let buffer: T[] = [];
     this.wasmModule.simpleListeners = this.wasmModule.simpleListeners || {};
     this.wasmModule.simpleListeners[outputStreamName] =
-        (data: unknown, index: number, length: number, timestamp: number) => {
-          // The Wasm listener gets invoked once for each element. Once we
-          // receive all elements, we invoke the registered callback with
-          // the full array.
-          buffer[index] = data as T;
-          if (index === length - 1) {
-            // Invoke the user callback directly, as the Wasm layer may
-            // clean up the underlying data elements once we leave the scope
-            // of the listener.
+        (data: unknown, done: boolean, timestamp: number) => {
+          if (done) {
             callbackFcn(buffer, timestamp);
             buffer = [];
+          } else {
+            buffer.push(data as T);
           }
         };
   }
@@ -679,6 +722,20 @@ export class GraphRunner {
             dataPtr, data.length, protoTypePtr, streamNamePtr, timestamp);
         this.wasmModule._free(dataPtr);
       });
+    });
+  }
+
+  /**
+   * Sends an empty packet into the specified stream at the given timestamp,
+   *     effectively advancing that input stream's timestamp bounds without
+   *     sending additional data packets.
+   * @param streamName The name of the graph input stream to send the empty
+   *     packet into.
+   * @param timestamp The timestamp of the empty packet, in ms.
+   */
+  addEmptyPacketToStream(streamName: string, timestamp: number): void {
+    this.wrapStringPtr(streamName, (streamNamePtr: number) => {
+      this.wasmModule._addEmptyPacketToInputStream(streamNamePtr, timestamp);
     });
   }
 
@@ -1108,6 +1165,18 @@ async function runScript(scriptUrl: string) {
     });
   }
 }
+
+/**
+ * Helper type macro for use with createMediaPipeLib. Allows us to easily infer
+ * the type of a mixin-extended GraphRunner. Example usage:
+ * const GraphRunnerConstructor =
+ *     SupportImage(SupportSerialization(GraphRunner));
+ * let mediaPipe: ReturnType<typeof GraphRunnerConstructor>;
+ * ...
+ * mediaPipe = await createMediaPipeLib(GraphRunnerConstructor, ...);
+ */
+// tslint:disable-next-line:no-any
+export type ReturnType<T> = T extends (...args: unknown[]) => infer R ? R : any;
 
 /**
  * Global function to initialize Wasm blob and load runtime assets for a

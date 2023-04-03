@@ -34,8 +34,32 @@ mediapipe_proto_library(
     name = "face_landmarks_detector_graph_options_proto",
     srcs = ["face_landmarks_detector_graph_options.proto"],
     deps = [
+        ":face_blendshapes_graph_options_proto",
         "//mediapipe/framework:calculator_options_proto",
         "//mediapipe/framework:calculator_proto",
         "//mediapipe/tasks/cc/core/proto:base_options_proto",
+    ],
+)
+
+mediapipe_proto_library(
+    name = "tensors_to_face_landmarks_graph_options_proto",
+    srcs = ["tensors_to_face_landmarks_graph_options.proto"],
+    deps = [
+        "//mediapipe/calculators/tensor:tensors_to_landmarks_calculator_proto",
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+    ],
+)
+
+mediapipe_proto_library(
+    name = "face_landmarker_graph_options_proto",
+    srcs = ["face_landmarker_graph_options.proto"],
+    deps = [
+        ":face_landmarks_detector_graph_options_proto",
+        "//mediapipe/framework:calculator_options_proto",
+        "//mediapipe/framework:calculator_proto",
+        "//mediapipe/tasks/cc/core/proto:base_options_proto",
+        "//mediapipe/tasks/cc/vision/face_detector/proto:face_detector_graph_options_proto",
+        "//mediapipe/tasks/cc/vision/face_geometry/proto:face_geometry_graph_options_proto",
     ],
 )

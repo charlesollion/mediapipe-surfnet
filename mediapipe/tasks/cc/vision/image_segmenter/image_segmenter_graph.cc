@@ -20,22 +20,27 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "mediapipe/calculators/image/image_clone_calculator.pb.h"
+#include "mediapipe/calculators/image/image_transformation_calculator.pb.h"
+#include "mediapipe/calculators/tensor/tensor_converter_calculator.pb.h"
 #include "mediapipe/framework/api2/builder.h"
 #include "mediapipe/framework/api2/port.h"
 #include "mediapipe/framework/formats/image.h"
 #include "mediapipe/framework/formats/rect.pb.h"
+#include "mediapipe/framework/formats/tensor.h"
 #include "mediapipe/framework/port/status_macros.h"
 #include "mediapipe/tasks/cc/common.h"
 #include "mediapipe/tasks/cc/components/processors/image_preprocessing_graph.h"
 #include "mediapipe/tasks/cc/components/processors/proto/image_preprocessing_graph_options.pb.h"
 #include "mediapipe/tasks/cc/core/model_resources.h"
 #include "mediapipe/tasks/cc/core/model_task_graph.h"
-#include "mediapipe/tasks/cc/core/proto/acceleration.pb.h"
 #include "mediapipe/tasks/cc/core/proto/inference_subgraph.pb.h"
 #include "mediapipe/tasks/cc/metadata/metadata_extractor.h"
 #include "mediapipe/tasks/cc/vision/image_segmenter/calculators/tensors_to_segmentation_calculator.pb.h"
 #include "mediapipe/tasks/cc/vision/image_segmenter/proto/image_segmenter_graph_options.pb.h"
 #include "mediapipe/tasks/cc/vision/image_segmenter/proto/segmenter_options.pb.h"
+#include "mediapipe/tasks/cc/vision/utils/image_tensor_specs.h"
+#include "mediapipe/tasks/metadata/image_segmenter_metadata_schema_generated.h"
 #include "mediapipe/tasks/metadata/metadata_schema_generated.h"
 #include "mediapipe/util/label_map.pb.h"
 #include "mediapipe/util/label_map_util.h"
@@ -59,16 +64,18 @@ using ::mediapipe::tasks::metadata::ModelMetadataExtractor;
 using ::mediapipe::tasks::vision::image_segmenter::proto::
     ImageSegmenterGraphOptions;
 using ::mediapipe::tasks::vision::image_segmenter::proto::SegmenterOptions;
-using ::tflite::Tensor;
 using ::tflite::TensorMetadata;
 using LabelItems = mediapipe::proto_ns::Map<int64, ::mediapipe::LabelMapItem>;
 
 constexpr char kSegmentationTag[] = "SEGMENTATION";
 constexpr char kGroupedSegmentationTag[] = "GROUPED_SEGMENTATION";
 constexpr char kImageTag[] = "IMAGE";
+constexpr char kImageCpuTag[] = "IMAGE_CPU";
+constexpr char kImageGpuTag[] = "IMAGE_GPU";
 constexpr char kNormRectTag[] = "NORM_RECT";
 constexpr char kTensorsTag[] = "TENSORS";
 constexpr char kOutputSizeTag[] = "OUTPUT_SIZE";
+constexpr char kSegmentationMetadataName[] = "SEGMENTER_METADATA";
 
 // Struct holding the different output streams produced by the image segmenter
 // subgraph.
@@ -76,6 +83,13 @@ struct ImageSegmenterOutputs {
   std::vector<Source<Image>> segmented_masks;
   // The same as the input image, mainly used for live stream mode.
   Source<Image> image;
+};
+
+// Struct holding the image and input tensors after image preprocessing and
+// transferred to the requested device.
+struct ImageAndTensorsOnDevice {
+  Source<Image> image;
+  Source<std::vector<Tensor>> tensors;
 };
 
 }  // namespace
@@ -118,7 +132,49 @@ absl::Status ConfigureTensorsToSegmentationCalculator(
     const ImageSegmenterGraphOptions& segmenter_option,
     const core::ModelResources& model_resources,
     TensorsToSegmentationCalculatorOptions* options) {
-  *options->mutable_segmenter_options() = segmenter_option.segmenter_options();
+  // Set default activation function NONE
+  options->mutable_segmenter_options()->set_output_type(
+      segmenter_option.segmenter_options().output_type());
+  options->mutable_segmenter_options()->set_activation(SegmenterOptions::NONE);
+  // Find the custom metadata of ImageSegmenterOptions type in model metadata.
+  const auto* metadata_extractor = model_resources.GetMetadataExtractor();
+  bool found_activation_in_metadata = false;
+  if (metadata_extractor->GetCustomMetadataList() != nullptr &&
+      metadata_extractor->GetCustomMetadataList()->size() > 0) {
+    for (const auto& custom_metadata :
+         *metadata_extractor->GetCustomMetadataList()) {
+      if (custom_metadata->name()->str() == kSegmentationMetadataName) {
+        found_activation_in_metadata = true;
+        auto activation_fb =
+            GetImageSegmenterOptions(custom_metadata->data()->data())
+                ->activation();
+        switch (activation_fb) {
+          case Activation_NONE:
+            options->mutable_segmenter_options()->set_activation(
+                SegmenterOptions::NONE);
+            break;
+          case Activation_SIGMOID:
+            options->mutable_segmenter_options()->set_activation(
+                SegmenterOptions::SIGMOID);
+            break;
+          case Activation_SOFTMAX:
+            options->mutable_segmenter_options()->set_activation(
+                SegmenterOptions::SOFTMAX);
+            break;
+          default:
+            return CreateStatusWithPayload(
+                absl::StatusCode::kInvalidArgument,
+                "Invalid activation type found in CustomMetadata of "
+                "ImageSegmenterOptions type.");
+        }
+      }
+    }
+  }
+  if (!found_activation_in_metadata) {
+    LOG(WARNING)
+        << "No activation type is found in model metadata. Use NONE for "
+           "ImageSegmenterGraph.";
+  }
   const tflite::Model& model = *model_resources.GetTfLiteModel();
   if (model.subgraphs()->size() != 1) {
     return CreateStatusWithPayload(
@@ -134,8 +190,6 @@ absl::Status ConfigureTensorsToSegmentationCalculator(
         MediaPipeTasksStatus::kInvalidArgumentError);
   }
 
-  const ModelMetadataExtractor* metadata_extractor =
-      model_resources.GetMetadataExtractor();
   ASSIGN_OR_RETURN(
       *options->mutable_label_items(),
       GetLabelItemsIfAny(*metadata_extractor,
@@ -144,13 +198,123 @@ absl::Status ConfigureTensorsToSegmentationCalculator(
   return absl::OkStatus();
 }
 
-absl::StatusOr<const Tensor*> GetOutputTensor(
+// Get the output tensor from the tflite model of given model resources.
+absl::StatusOr<const tflite::Tensor*> GetOutputTensor(
     const core::ModelResources& model_resources) {
   const tflite::Model& model = *model_resources.GetTfLiteModel();
   const auto* primary_subgraph = (*model.subgraphs())[0];
   const auto* output_tensor =
       (*primary_subgraph->tensors())[(*primary_subgraph->outputs())[0]];
   return output_tensor;
+}
+
+// Get the input tensor from the tflite model of given model resources.
+absl::StatusOr<const tflite::Tensor*> GetInputTensor(
+    const core::ModelResources& model_resources) {
+  const tflite::Model& model = *model_resources.GetTfLiteModel();
+  const auto* primary_subgraph = (*model.subgraphs())[0];
+  const auto* input_tensor =
+      (*primary_subgraph->tensors())[(*primary_subgraph->inputs())[0]];
+  return input_tensor;
+}
+
+// Configure the ImageTransformationCalculator according to the input tensor.
+void ConfigureImageTransformationCalculator(
+    const tflite::Tensor& tflite_input_tensor,
+    mediapipe::ImageTransformationCalculatorOptions& options) {
+  options.set_output_height(tflite_input_tensor.shape()->data()[1]);
+  options.set_output_width(tflite_input_tensor.shape()->data()[2]);
+}
+
+// Configure the TensorConverterCalculator to convert the image to tensor.
+void ConfigureTensorConverterCalculator(
+    const ImageTensorSpecs& image_tensor_specs,
+    mediapipe::TensorConverterCalculatorOptions& options) {
+  float mean = image_tensor_specs.normalization_options->mean_values[0];
+  float std = image_tensor_specs.normalization_options->std_values[0];
+  options.set_max_num_channels(4);
+  options.mutable_output_tensor_float_range()->set_min((0.0f - mean) / std);
+  options.mutable_output_tensor_float_range()->set_max((255.0f - mean) / std);
+}
+
+// Image preprocessing step to convert the given image to the input tensors for
+// the tflite model.
+absl::StatusOr<ImageAndTensorsOnDevice> ConvertImageToTensors(
+    Source<Image> image_in, Source<NormalizedRect> norm_rect_in, bool use_gpu,
+    const core::ModelResources& model_resources, Graph& graph) {
+  ASSIGN_OR_RETURN(const tflite::Tensor* tflite_input_tensor,
+                   GetInputTensor(model_resources));
+  if (tflite_input_tensor->shape()->size() != 4) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("Expect segmentation model has input image tensor to "
+                        "be 4 dims. Got input tensor with "
+                        "dims: %d",
+                        tflite_input_tensor->shape()->size()));
+  }
+  const int input_tensor_channel = tflite_input_tensor->shape()->data()[3];
+  if (input_tensor_channel != 3 && input_tensor_channel != 4) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Expect segmentation model has input image tensor with channels = 3 or "
+        "4. Get "
+        "channel = %d",
+        tflite_input_tensor->shape()->data()[3]));
+  } else if (input_tensor_channel == 3) {
+    // ImagePreprocessingGraph is backed by ImageToTensorCalculator which only
+    // supports Tensor with channel = 3.
+    auto& preprocessing = graph.AddNode(
+        "mediapipe.tasks.components.processors.ImagePreprocessingGraph");
+    MP_RETURN_IF_ERROR(components::processors::ConfigureImagePreprocessingGraph(
+        model_resources, use_gpu,
+        &preprocessing.GetOptions<tasks::components::processors::proto::
+                                      ImagePreprocessingGraphOptions>()));
+    image_in >> preprocessing.In(kImageTag);
+    norm_rect_in >> preprocessing.In(kNormRectTag);
+    return {{preprocessing.Out(kImageTag).Cast<Image>(),
+             preprocessing.Out(kTensorsTag).Cast<std::vector<Tensor>>()}};
+  } else {
+    // TODO Remove legacy preprocessing calculators.
+    // For segmentation model with input Tensor with channel = 4, use legacy
+    // TfLite preprocessing calculators
+
+    // Upload image to GPU if requested to use gpu.
+    auto& image_clone = graph.AddNode("ImageCloneCalculator");
+    image_clone.GetOptions<mediapipe::ImageCloneCalculatorOptions>()
+        .set_output_on_gpu(use_gpu);
+    image_in >> image_clone.In("");
+    Source<Image> image_on_device = image_clone.Out("").Cast<Image>();
+
+    // Convert from Image to legacy ImageFrame or GpuBuffer.
+    auto& from_image = graph.AddNode("FromImageCalculator");
+    image_on_device >> from_image.In(kImageTag);
+    auto image_cpu_or_gpu =
+        from_image.Out(use_gpu ? kImageGpuTag : kImageCpuTag);
+
+    // Resize the input image to the model input size.
+    auto& image_transformation = graph.AddNode("ImageTransformationCalculator");
+    ConfigureImageTransformationCalculator(
+        *tflite_input_tensor,
+        image_transformation
+            .GetOptions<mediapipe::ImageTransformationCalculatorOptions>());
+    const absl::string_view image_or_image_gpu_tag =
+        use_gpu ? kImageGpuTag : kImageTag;
+    image_cpu_or_gpu >> image_transformation.In(image_or_image_gpu_tag);
+    auto transformed_image = image_transformation.Out(image_or_image_gpu_tag);
+
+    // Convert image to mediapipe tensor.
+    auto& tensor_converter = graph.AddNode("TensorConverterCalculator");
+    ASSIGN_OR_RETURN(auto image_tensor_specs,
+                     vision::BuildInputImageTensorSpecs(model_resources));
+    ConfigureTensorConverterCalculator(
+        image_tensor_specs,
+        tensor_converter
+            .GetOptions<mediapipe::TensorConverterCalculatorOptions>());
+
+    transformed_image >> tensor_converter.In(image_or_image_gpu_tag);
+    auto tensors =
+        tensor_converter.Out(kTensorsTag).Cast<std::vector<Tensor>>();
+
+    return {{image_on_device, tensors}};
+  }
 }
 
 // An "mediapipe.tasks.vision.ImageSegmenterGraph" performs semantic
@@ -244,23 +408,17 @@ class ImageSegmenterGraph : public core::ModelTaskGraph {
 
     // Adds preprocessing calculators and connects them to the graph input image
     // stream.
-    auto& preprocessing = graph.AddNode(
-        "mediapipe.tasks.components.processors.ImagePreprocessingGraph");
     bool use_gpu =
         components::processors::DetermineImagePreprocessingGpuBackend(
             task_options.base_options().acceleration());
-    MP_RETURN_IF_ERROR(components::processors::ConfigureImagePreprocessingGraph(
-        model_resources, use_gpu,
-        &preprocessing.GetOptions<tasks::components::processors::proto::
-                                      ImagePreprocessingGraphOptions>()));
-    image_in >> preprocessing.In(kImageTag);
-    norm_rect_in >> preprocessing.In(kNormRectTag);
-
+    ASSIGN_OR_RETURN(auto image_and_tensors,
+                     ConvertImageToTensors(image_in, norm_rect_in, use_gpu,
+                                           model_resources, graph));
     // Adds inference subgraph and connects its input stream to the output
     // tensors produced by the ImageToTensorCalculator.
     auto& inference = AddInference(
         model_resources, task_options.base_options().acceleration(), graph);
-    preprocessing.Out(kTensorsTag) >> inference.In(kTensorsTag);
+    image_and_tensors.tensors >> inference.In(kTensorsTag);
 
     // Adds segmentation calculators for output streams.
     auto& tensor_to_images =
@@ -283,17 +441,16 @@ class ImageSegmenterGraph : public core::ModelTaskGraph {
       segmented_masks.push_back(
           Source<Image>(tensor_to_images[Output<Image>(kSegmentationTag)]));
     } else {
-      ASSIGN_OR_RETURN(const Tensor* output_tensor,
+      ASSIGN_OR_RETURN(const tflite::Tensor* output_tensor,
                        GetOutputTensor(model_resources));
-      const int segmentation_streams_num = *output_tensor->shape()->rbegin();
+      int segmentation_streams_num = *output_tensor->shape()->rbegin();
       for (int i = 0; i < segmentation_streams_num; ++i) {
         segmented_masks.push_back(Source<Image>(
             tensor_to_images[Output<Image>::Multiple(kSegmentationTag)][i]));
       }
     }
-    return ImageSegmenterOutputs{
-        /*segmented_masks=*/segmented_masks,
-        /*image=*/preprocessing[Output<Image>(kImageTag)]};
+    return ImageSegmenterOutputs{/*segmented_masks=*/segmented_masks,
+                                 /*image=*/image_and_tensors.image};
   }
 };
 

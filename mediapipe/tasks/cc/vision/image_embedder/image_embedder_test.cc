@@ -52,7 +52,7 @@ constexpr char kMobileNetV3Embedder[] =
 constexpr double kSimilarityTolerancy = 1e-6;
 
 // Utility function to check the sizes, head_index and head_names of a result
-// procuded by kMobileNetV3Embedder.
+// produced by kMobileNetV3Embedder.
 void CheckMobileNetV3Result(const ImageEmbedderResult& result, bool quantized) {
   EXPECT_EQ(result.embeddings.size(), 1);
   EXPECT_EQ(result.embeddings[0].head_index, 0);
@@ -371,7 +371,7 @@ TEST_F(ImageModeTest, SucceedsWithRotation) {
   MP_ASSERT_OK_AND_ASSIGN(double similarity, ImageEmbedder::CosineSimilarity(
                                                  image_result.embeddings[0],
                                                  rotated_result.embeddings[0]));
-  double expected_similarity = 0.572265;
+  double expected_similarity = 0.98223;
   EXPECT_LE(abs(similarity - expected_similarity), kSimilarityTolerancy);
 }
 
@@ -406,7 +406,7 @@ TEST_F(ImageModeTest, SucceedsWithRegionOfInterestAndRotation) {
   MP_ASSERT_OK_AND_ASSIGN(double similarity, ImageEmbedder::CosineSimilarity(
                                                  crop_result.embeddings[0],
                                                  rotated_result.embeddings[0]));
-  double expected_similarity = 0.62838;
+  double expected_similarity = 0.974683;
   EXPECT_LE(abs(similarity - expected_similarity), kSimilarityTolerancy);
 }
 

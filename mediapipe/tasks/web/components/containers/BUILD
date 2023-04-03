@@ -16,6 +16,11 @@ mediapipe_ts_declaration(
 )
 
 mediapipe_ts_declaration(
+    name = "keypoint",
+    srcs = ["keypoint.d.ts"],
+)
+
+mediapipe_ts_declaration(
     name = "landmark",
     srcs = ["landmark.d.ts"],
 )
@@ -28,4 +33,9 @@ mediapipe_ts_declaration(
 mediapipe_ts_declaration(
     name = "rect",
     srcs = ["rect.d.ts"],
+)
+
+mediapipe_ts_declaration(
+    name = "matrix",
+    srcs = ["matrix.d.ts"],
 )

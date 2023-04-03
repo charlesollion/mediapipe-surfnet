@@ -62,11 +62,9 @@
 #include "mediapipe/framework/tool/validate.h"
 #include "mediapipe/framework/tool/validate_name.h"
 #include "mediapipe/framework/validated_graph_config.h"
+#include "mediapipe/gpu/gpu_service.h"
 #include "mediapipe/gpu/graph_support.h"
 #include "mediapipe/util/cpu_util.h"
-#if !MEDIAPIPE_DISABLE_GPU
-#include "mediapipe/gpu/gpu_shared_data_internal.h"
-#endif  // !MEDIAPIPE_DISABLE_GPU
 
 namespace mediapipe {
 
@@ -633,7 +631,13 @@ absl::Status CalculatorGraph::PrepareServices() {
     for (const auto& [key, request] : node->Contract().ServiceRequests()) {
       auto packet = service_manager_.GetServicePacket(request.Service());
       if (!packet.IsEmpty()) continue;
-      auto packet_or = request.Service().CreateDefaultObject();
+      absl::StatusOr<Packet> packet_or;
+      if (allow_service_default_initialization_) {
+        packet_or = request.Service().CreateDefaultObject();
+      } else {
+        packet_or = absl::FailedPreconditionError(
+            "Service default initialization is disallowed.");
+      }
       if (packet_or.ok()) {
         MP_RETURN_IF_ERROR(service_manager_.SetServicePacket(
             request.Service(), std::move(packet_or).value()));

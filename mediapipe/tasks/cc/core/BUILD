@@ -55,15 +55,15 @@ cc_library(
     srcs = ["external_file_handler.cc"],
     hdrs = ["external_file_handler.h"],
     deps = [
+        "//mediapipe/framework/port:integral_types",
+        "//mediapipe/framework/port:status",
+        "//mediapipe/tasks/cc:common",
+        "//mediapipe/tasks/cc/core/proto:external_file_cc_proto",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
-        "//mediapipe/framework/port:integral_types",
-        "//mediapipe/framework/port:status",
-        "//mediapipe/tasks/cc:common",
-        "//mediapipe/tasks/cc/core/proto:external_file_cc_proto",
     ] + select({
         "//mediapipe:windows": ["@bazel_tools//tools/cpp/runfiles"],
         "//conditions:default": [],
@@ -75,6 +75,8 @@ cc_library(
     srcs = ["mediapipe_builtin_op_resolver.cc"],
     hdrs = ["mediapipe_builtin_op_resolver.h"],
     deps = [
+        "//mediapipe/tasks/cc/text/language_detector/custom_ops:kmeans_embedding_lookup",
+        "//mediapipe/tasks/cc/text/language_detector/custom_ops:ngram_hash",
         "//mediapipe/util/tflite/operations:landmarks_to_transform_matrix",
         "//mediapipe/util/tflite/operations:max_pool_argmax",
         "//mediapipe/util/tflite/operations:max_unpooling",
@@ -332,9 +334,11 @@ cc_library(
         "//mediapipe/tasks:internal",
     ],
     deps = [
+        ":external_file_handler",
         "//mediapipe/calculators/core:flow_limiter_calculator_cc_proto",
         "//mediapipe/framework:calculator_cc_proto",
         "//mediapipe/framework/api2:builder",
+        "//mediapipe/tasks/cc/core/proto:external_file_cc_proto",
         "//mediapipe/tasks/metadata:metadata_schema_cc",
         "@com_google_absl//absl/strings",
         "@flatbuffers//:runtime_cc",
@@ -375,6 +379,5 @@ cc_test(
         "//mediapipe/tasks/cc:common",
         "//mediapipe/tasks/cc/core/proto:external_file_cc_proto",
         "//mediapipe/tasks/cc/metadata/utils:zip_utils",
-        "@org_tensorflow//tensorflow/lite/c:common",
     ],
 )

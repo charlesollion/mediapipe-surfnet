@@ -29,11 +29,11 @@ public abstract class ImageSegmenterResult implements TaskResult {
    *
    * @param segmentations a {@link List} of MPImage representing the segmented masks. If OutputType
    *     is CATEGORY_MASK, the masks will be in IMAGE_FORMAT_ALPHA format. If OutputType is
-   *     CONFIDENCE_MASK, the masks will be in IMAGE_FORMAT_ALPHA format.
+   *     CONFIDENCE_MASK, the masks will be in IMAGE_FORMAT_VEC32F1 format.
    * @param timestampMs a timestamp for this result.
    */
   // TODO: consolidate output formats across platforms.
-  static ImageSegmenterResult create(List<MPImage> segmentations, long timestampMs) {
+  public static ImageSegmenterResult create(List<MPImage> segmentations, long timestampMs) {
     return new AutoValue_ImageSegmenterResult(
         Collections.unmodifiableList(segmentations), timestampMs);
   }

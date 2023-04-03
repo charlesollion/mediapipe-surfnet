@@ -1,5 +1,6 @@
 ---
-layout: default
+layout: forward
+target: https://developers.google.com/mediapipe/framework/getting_started/install
 title: Installation
 parent: Getting Started
 nav_order: 6
@@ -65,6 +66,13 @@ install --user six`.
         libopencv-features2d-dev \
         libopencv-imgproc-dev \
         libopencv-video-dev
+    ```
+
+    **Note**. On Debian 11/Ubuntu 21.04 where OpenCV 4.5 is installed with
+    `libopencv-video-dev`, `libopencv-contrib-dev` should also be installed.
+
+    ```bash
+    $ sudo apt-get install -y libopencv-contrib-dev
     ```
 
     MediaPipe's [`opencv_linux.BUILD`] and [`WORKSPACE`] are already configured
@@ -569,7 +577,7 @@ next section.
 
     Option 1. Follow
     [the official Bazel documentation](https://docs.bazel.build/versions/master/install-windows.html)
-    to install Bazel 5.2.0 or higher.
+    to install Bazel 6.1.1 or higher.
 
     Option 2. Follow the official
     [Bazel documentation](https://docs.bazel.build/versions/master/install-bazelisk.html)

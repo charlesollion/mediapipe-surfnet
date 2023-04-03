@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <optional>
+
 #include "absl/flags/flag.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
@@ -21,6 +23,7 @@ limitations under the License.
 #include "mediapipe/framework/api2/port.h"
 #include "mediapipe/framework/calculator_framework.h"
 #include "mediapipe/framework/deps/file_path.h"
+#include "mediapipe/framework/formats/classification.pb.h"
 #include "mediapipe/framework/formats/image.h"
 #include "mediapipe/framework/formats/landmark.pb.h"
 #include "mediapipe/framework/formats/rect.pb.h"
@@ -29,9 +32,11 @@ limitations under the License.
 #include "mediapipe/framework/port/file_helpers.h"
 #include "mediapipe/framework/port/gmock.h"
 #include "mediapipe/framework/port/gtest.h"
+#include "mediapipe/tasks/cc/core/mediapipe_builtin_op_resolver.h"
 #include "mediapipe/tasks/cc/core/proto/base_options.pb.h"
 #include "mediapipe/tasks/cc/core/proto/external_file.pb.h"
 #include "mediapipe/tasks/cc/core/task_runner.h"
+#include "mediapipe/tasks/cc/vision/face_landmarker/proto/face_blendshapes_graph_options.pb.h"
 #include "mediapipe/tasks/cc/vision/face_landmarker/proto/face_landmarks_detector_graph_options.pb.h"
 #include "mediapipe/tasks/cc/vision/utils/image_utils.h"
 
@@ -61,10 +66,17 @@ using ::testing::proto::Partially;
 
 constexpr char kTestDataDirectory[] = "/mediapipe/tasks/testdata/vision/";
 constexpr char kFaceLandmarksDetectionModel[] = "face_landmark.tflite";
+constexpr char kFaceLandmarksDetectionWithAttentionModel[] =
+    "face_landmark_with_attention.tflite";
 constexpr char kPortraitImageName[] = "portrait.jpg";
 constexpr char kCatImageName[] = "cat.jpg";
 constexpr char kPortraitExpectedFaceLandamrksName[] =
     "portrait_expected_face_landmarks.pbtxt";
+constexpr char kPortraitExpectedFaceLandamrksWithAttentionName[] =
+    "portrait_expected_face_landmarks_with_attention.pbtxt";
+constexpr char kFaceBlendshapesModel[] = "face_blendshapes.tflite";
+constexpr char kPortraitExpectedBlendshapesName[] =
+    "portrait_expected_blendshapes_with_attention.pbtxt";
 
 constexpr char kImageTag[] = "IMAGE";
 constexpr char kImageName[] = "image";
@@ -81,13 +93,17 @@ constexpr char kPresenceTag[] = "PRESENCE";
 constexpr char kPresenceName[] = "presence";
 constexpr char kPresenceScoreTag[] = "PRESENCE_SCORE";
 constexpr char kPresenceScoreName[] = "presence_score";
+constexpr char kBlendshapesTag[] = "BLENDSHAPES";
+constexpr char kBlendshapesName[] = "blendshapes";
 
 constexpr float kFractionDiff = 0.05;  // percentage
 constexpr float kAbsMargin = 0.03;
+constexpr float kBlendshapesDiffMargin = 0.1;
 
 // Helper function to create a Single Face Landmark TaskRunner.
 absl::StatusOr<std::unique_ptr<TaskRunner>> CreateSingleFaceLandmarksTaskRunner(
-    absl::string_view model_name) {
+    absl::string_view landmarks_model_name,
+    std::optional<absl::string_view> blendshapes_model_name) {
   Graph graph;
 
   auto& face_landmark_detection = graph.AddNode(
@@ -96,8 +112,17 @@ absl::StatusOr<std::unique_ptr<TaskRunner>> CreateSingleFaceLandmarksTaskRunner(
 
   auto options = std::make_unique<proto::FaceLandmarksDetectorGraphOptions>();
   options->mutable_base_options()->mutable_model_asset()->set_file_name(
-      JoinPath("./", kTestDataDirectory, model_name));
+      JoinPath("./", kTestDataDirectory, landmarks_model_name));
   options->set_min_detection_confidence(0.5);
+
+  if (blendshapes_model_name.has_value()) {
+    options->mutable_face_blendshapes_graph_options()
+        ->mutable_base_options()
+        ->mutable_model_asset()
+        ->set_file_name(
+            JoinPath("./", kTestDataDirectory, *blendshapes_model_name));
+  }
+
   face_landmark_detection.GetOptions<proto::FaceLandmarksDetectorGraphOptions>()
       .Swap(options.get());
 
@@ -115,15 +140,19 @@ absl::StatusOr<std::unique_ptr<TaskRunner>> CreateSingleFaceLandmarksTaskRunner(
   face_landmark_detection.Out(kFaceRectNextFrameTag)
           .SetName(kFaceRectNextFrameName) >>
       graph[Output<NormalizedRect>(kFaceRectNextFrameTag)];
+  if (blendshapes_model_name.has_value()) {
+    face_landmark_detection.Out(kBlendshapesTag).SetName(kBlendshapesName) >>
+        graph[Output<ClassificationList>(kBlendshapesTag)];
+  }
 
   return TaskRunner::Create(
-      graph.GetConfig(),
-      absl::make_unique<tflite_shims::ops::builtin::BuiltinOpResolver>());
+      graph.GetConfig(), absl::make_unique<core::MediaPipeBuiltinOpResolver>());
 }
 
 // Helper function to create a Multi Face Landmark TaskRunner.
 absl::StatusOr<std::unique_ptr<TaskRunner>> CreateMultiFaceLandmarksTaskRunner(
-    absl::string_view model_name) {
+    absl::string_view landmarks_model_name,
+    std::optional<absl::string_view> blendshapes_model_name) {
   Graph graph;
 
   auto& face_landmark_detection = graph.AddNode(
@@ -132,8 +161,15 @@ absl::StatusOr<std::unique_ptr<TaskRunner>> CreateMultiFaceLandmarksTaskRunner(
 
   auto options = std::make_unique<proto::FaceLandmarksDetectorGraphOptions>();
   options->mutable_base_options()->mutable_model_asset()->set_file_name(
-      JoinPath("./", kTestDataDirectory, model_name));
+      JoinPath("./", kTestDataDirectory, landmarks_model_name));
   options->set_min_detection_confidence(0.5);
+  if (blendshapes_model_name.has_value()) {
+    options->mutable_face_blendshapes_graph_options()
+        ->mutable_base_options()
+        ->mutable_model_asset()
+        ->set_file_name(
+            JoinPath("./", kTestDataDirectory, *blendshapes_model_name));
+  }
   face_landmark_detection.GetOptions<proto::FaceLandmarksDetectorGraphOptions>()
       .Swap(options.get());
 
@@ -152,10 +188,13 @@ absl::StatusOr<std::unique_ptr<TaskRunner>> CreateMultiFaceLandmarksTaskRunner(
   face_landmark_detection.Out(kFaceRectsNextFrameTag)
           .SetName(kFaceRectsNextFrameName) >>
       graph[Output<std::vector<NormalizedRect>>(kFaceRectsNextFrameTag)];
+  if (blendshapes_model_name.has_value()) {
+    face_landmark_detection.Out(kBlendshapesTag).SetName(kBlendshapesName) >>
+        graph[Output<ClassificationList>(kBlendshapesTag)];
+  }
 
   return TaskRunner::Create(
-      graph.GetConfig(),
-      absl::make_unique<tflite_shims::ops::builtin::BuiltinOpResolver>());
+      graph.GetConfig(), absl::make_unique<core::MediaPipeBuiltinOpResolver>());
 }
 
 NormalizedLandmarkList GetExpectedLandmarkList(absl::string_view filename) {
@@ -165,16 +204,23 @@ NormalizedLandmarkList GetExpectedLandmarkList(absl::string_view filename) {
   return expected_landmark_list;
 }
 
+ClassificationList GetBlendshapes(absl::string_view filename) {
+  ClassificationList blendshapes;
+  MP_EXPECT_OK(GetTextProto(file::JoinPath("./", kTestDataDirectory, filename),
+                            &blendshapes, Defaults()));
+  return blendshapes;
+}
+
 // Helper function to construct NormalizeRect proto.
 NormalizedRect MakeNormRect(float x_center, float y_center, float width,
                             float height, float rotation) {
-  NormalizedRect hand_rect;
-  hand_rect.set_x_center(x_center);
-  hand_rect.set_y_center(y_center);
-  hand_rect.set_width(width);
-  hand_rect.set_height(height);
-  hand_rect.set_rotation(rotation);
-  return hand_rect;
+  NormalizedRect face_rect;
+  face_rect.set_x_center(x_center);
+  face_rect.set_y_center(y_center);
+  face_rect.set_width(width);
+  face_rect.set_height(height);
+  face_rect.set_rotation(rotation);
+  return face_rect;
 }
 
 // Struct holding the parameters for parameterized FaceLandmarksDetectionTest
@@ -182,35 +228,49 @@ NormalizedRect MakeNormRect(float x_center, float y_center, float width,
 struct SingeFaceTestParams {
   // The name of this test, for convenience when displaying test results.
   std::string test_name;
-  // The filename of the model to test.
-  std::string input_model_name;
+  // The filename of landmarks model name.
+  std::string landmarks_model_name;
+  // The filename of blendshape model name.
+  std::optional<std::string> blendshape_model_name;
   // The filename of the test image.
   std::string test_image_name;
-  // RoI on image to detect hands.
+  // RoI on image to detect faces.
   NormalizedRect norm_rect;
-  // Expected hand presence value.
+  // Expected face presence value.
   bool expected_presence;
   // The expected output landmarks positions.
   NormalizedLandmarkList expected_landmarks;
+  // The expected output blendshape classification;
+  std::optional<ClassificationList> expected_blendshapes;
   // The max value difference between expected_positions and detected positions.
   float landmarks_diff_threshold;
+  // The max value difference between expected blendshapes and actual
+  // blendshapes.
+  float blendshapes_diff_threshold;
 };
 
 struct MultiFaceTestParams {
   // The name of this test, for convenience when displaying test results.
   std::string test_name;
-  // The filename of the model to test.
-  std::string input_model_name;
+  // The filename of landmarks model name.
+  std::string landmarks_model_name;
+  // The filename of blendshape model name.
+  std::optional<std::string> blendshape_model_name;
   // The filename of the test image.
   std::string test_image_name;
-  // RoI on image to detect hands.
+  // RoI on image to detect faces.
   std::vector<NormalizedRect> norm_rects;
-  // Expected hand presence value.
+  // Expected face presence value.
   std::vector<bool> expected_presence;
   // The expected output landmarks positions.
   std::optional<std::vector<NormalizedLandmarkList>> expected_landmarks_lists;
+  // The expected output blendshape classification;
+  std::optional<std::vector<ClassificationList>> expected_blendshapes;
   // The max value difference between expected_positions and detected positions.
   float landmarks_diff_threshold;
+  // The max value difference between expected blendshapes and actual
+  // blendshapes.
+  float blendshapes_diff_threshold;
 };
 
 class SingleFaceLandmarksDetectionTest
@@ -220,8 +280,10 @@ TEST_P(SingleFaceLandmarksDetectionTest, Succeeds) {
   MP_ASSERT_OK_AND_ASSIGN(
       Image image, DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
                                                 GetParam().test_image_name)));
-  MP_ASSERT_OK_AND_ASSIGN(auto task_runner, CreateSingleFaceLandmarksTaskRunner(
-                                                GetParam().input_model_name));
+  MP_ASSERT_OK_AND_ASSIGN(
+      auto task_runner,
+      CreateSingleFaceLandmarksTaskRunner(GetParam().landmarks_model_name,
+                                          GetParam().blendshape_model_name));
 
   auto output_packets = task_runner->Process(
       {{kImageName, MakePacket<Image>(std::move(image))},
@@ -237,12 +299,20 @@ TEST_P(SingleFaceLandmarksDetectionTest, Succeeds) {
         (*output_packets)[kNormLandmarksName].Get<NormalizedLandmarkList>();
     const NormalizedLandmarkList& expected_landmarks =
         GetParam().expected_landmarks;
-
     EXPECT_THAT(
         landmarks,
         Approximately(Partially(EqualsProto(expected_landmarks)),
                       /*margin=*/kAbsMargin,
                       /*fraction=*/GetParam().landmarks_diff_threshold));
+    if (GetParam().expected_blendshapes) {
+      const ClassificationList& actual_blendshapes =
+          (*output_packets)[kBlendshapesName].Get<ClassificationList>();
+      const ClassificationList& expected_blendshapes =
+          *GetParam().expected_blendshapes;
+      EXPECT_THAT(actual_blendshapes,
+                  Approximately(EqualsProto(expected_blendshapes),
+                                GetParam().blendshapes_diff_threshold));
+    }
   }
 }
 
@@ -253,8 +323,10 @@ TEST_P(MultiFaceLandmarksDetectionTest, Succeeds) {
   MP_ASSERT_OK_AND_ASSIGN(
       Image image, DecodeImageFromFile(JoinPath("./", kTestDataDirectory,
                                                 GetParam().test_image_name)));
-  MP_ASSERT_OK_AND_ASSIGN(auto task_runner, CreateMultiFaceLandmarksTaskRunner(
-                                                GetParam().input_model_name));
+  MP_ASSERT_OK_AND_ASSIGN(
+      auto task_runner,
+      CreateMultiFaceLandmarksTaskRunner(GetParam().landmarks_model_name,
+                                         GetParam().blendshape_model_name));
 
   auto output_packets = task_runner->Process(
       {{kImageName, MakePacket<Image>(std::move(image))},
@@ -275,19 +347,65 @@ TEST_P(MultiFaceLandmarksDetectionTest, Succeeds) {
                               /*fraction=*/GetParam().landmarks_diff_threshold),
                           *GetParam().expected_landmarks_lists));
   }
+  if (GetParam().expected_blendshapes) {
+    const std::vector<ClassificationList>& actual_blendshapes =
+        (*output_packets)[kBlendshapesName]
+            .Get<std::vector<ClassificationList>>();
+    const std::vector<ClassificationList>& expected_blendshapes =
+        *GetParam().expected_blendshapes;
+    EXPECT_THAT(actual_blendshapes,
+                Pointwise(Approximately(EqualsProto(),
+                                        GetParam().blendshapes_diff_threshold),
+                          expected_blendshapes));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
     FaceLandmarksDetectionTest, SingleFaceLandmarksDetectionTest,
     Values(SingeFaceTestParams{
-        /* test_name= */ "Portrait",
-        /*input_model_name= */ kFaceLandmarksDetectionModel,
-        /*test_image_name=*/kPortraitImageName,
-        /*norm_rect= */ MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0),
-        /*expected_presence = */ true,
-        /*expected_landmarks = */
-        GetExpectedLandmarkList(kPortraitExpectedFaceLandamrksName),
-        /*landmarks_diff_threshold = */ kFractionDiff}),
+               /* test_name= */ "Portrait",
+               /* landmarks_model_name= */ kFaceLandmarksDetectionModel,
+               /* blendshape_model_name= */ std::nullopt,
+               /* test_image_name=*/kPortraitImageName,
+               /* norm_rect= */ MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0),
+               /* expected_presence= */ true,
+               /* expected_landmarks= */
+               GetExpectedLandmarkList(kPortraitExpectedFaceLandamrksName),
+               /* expected_blendshapes= */ std::nullopt,
+               /* landmarks_diff_threshold= */ kFractionDiff,
+               /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin},
+           SingeFaceTestParams{
+               /* test_name= */ "PortraitWithAttention",
+               /* landmarks_model_name= */
+               kFaceLandmarksDetectionWithAttentionModel,
+               /* blendshape_model_name= */ std::nullopt,
+               /* test_image_name= */ kPortraitImageName,
+               /* norm_rect= */ MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0),
+               /* expected_presence= */ true,
+               /* expected_landmarks= */
+               GetExpectedLandmarkList(
+                   kPortraitExpectedFaceLandamrksWithAttentionName),
+               /* expected_blendshapes= */ std::nullopt,
+               /* landmarks_diff_threshold= */ kFractionDiff,
+               /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin},
+           SingeFaceTestParams{
+               /* test_name= */ "PortraitWithAttentionWithBlendshapes",
+               /* landmarks_model_name= */
+               kFaceLandmarksDetectionWithAttentionModel,
+               /* blendshape_model_name= */ kFaceBlendshapesModel,
+               /* test_image_name= */ kPortraitImageName,
+               /* norm_rect= */
+               MakeNormRect(0.48906386, 0.22731927, 0.42905223, 0.34357703,
+                            0.008304443),
+               /* expected_presence= */ true,
+               /* expected_landmarks= */
+               GetExpectedLandmarkList(
+                   kPortraitExpectedFaceLandamrksWithAttentionName),
+               /* expected_blendshapes= */
+               GetBlendshapes(kPortraitExpectedBlendshapesName),
+               /* landmarks_diff_threshold= */ kFractionDiff,
+               /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin}),
+
     [](const TestParamInfo<SingleFaceLandmarksDetectionTest::ParamType>& info) {
       return info.param.test_name;
     });
@@ -297,21 +415,59 @@ INSTANTIATE_TEST_SUITE_P(
     Values(
         MultiFaceTestParams{
             /* test_name= */ "Portrait",
-            /*input_model_name= */ kFaceLandmarksDetectionModel,
-            /*test_image_name=*/kPortraitImageName,
-            /*norm_rects= */ {MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0)},
-            /*expected_presence = */ {true},
-            /*expected_landmarks_list = */
+            /* landmarks_model_name= */ kFaceLandmarksDetectionModel,
+            /* blendshape_model_name= */ std::nullopt,
+            /* test_image_name= */ kPortraitImageName,
+            /* norm_rects= */ {MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0)},
+            /* expected_presence= */ {true},
+            /* expected_landmarks_list= */
             {{GetExpectedLandmarkList(kPortraitExpectedFaceLandamrksName)}},
-            /*landmarks_diff_threshold = */ kFractionDiff},
+            /* expected_blendshapes= */ std::nullopt,
+            /* landmarks_diff_threshold= */ kFractionDiff,
+            /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin},
+        MultiFaceTestParams{
+            /* test_name= */ "PortraitWithAttention",
+            /* landmarks_model_name= */
+            kFaceLandmarksDetectionWithAttentionModel,
+            /* blendshape_model_name= */ std::nullopt,
+            /* test_image_name= */ kPortraitImageName,
+            /* norm_rects= */ {MakeNormRect(0.4987, 0.2211, 0.2877, 0.2303, 0)},
+            /* expected_presence= */ {true},
+            /* expected_landmarks_list= */
+            {{GetExpectedLandmarkList(
+                kPortraitExpectedFaceLandamrksWithAttentionName)}},
+            /* expected_blendshapes= */ std::nullopt,
+            /* landmarks_diff_threshold= */ kFractionDiff,
+            /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin},
+        MultiFaceTestParams{
+            /* test_name= */ "PortraitWithAttentionWithBlendshapes",
+            /* landmarks_model_name= */
+            kFaceLandmarksDetectionWithAttentionModel,
+            /* blendshape_model_name= */ kFaceBlendshapesModel,
+            /* test_image_name= */ kPortraitImageName,
+            /* norm_rects= */
+            {MakeNormRect(0.48906386, 0.22731927, 0.42905223, 0.34357703,
+                          0.008304443)},
+            /* expected_presence= */ {true},
+            /* expected_landmarks_list= */
+            {{GetExpectedLandmarkList(
+                kPortraitExpectedFaceLandamrksWithAttentionName)}},
+            /* expected_blendshapes= */
+            {{GetBlendshapes(kPortraitExpectedBlendshapesName)}},
+            /* landmarks_diff_threshold= */ kFractionDiff,
+            /* blendshapes_diff_threshold= */ kBlendshapesDiffMargin},
         MultiFaceTestParams{
             /* test_name= */ "NoFace",
-            /*input_model_name= */ kFaceLandmarksDetectionModel,
-            /*test_image_name=*/kCatImageName,
-            /*norm_rects= */ {MakeNormRect(0.5, 0.5, 1.0, 1.0, 0)},
-            /*expected_presence = */ {false},
-            /*expected_landmarks_list = */ std::nullopt,
-            /*landmarks_diff_threshold = */ kFractionDiff}),
+            /* landmarks_model_name= */
+            kFaceLandmarksDetectionModel,
+            /* blendshape_model_name= */ std::nullopt,
+            /* test_image_name= */ kCatImageName,
+            /* norm_rects= */ {MakeNormRect(0.5, 0.5, 1.0, 1.0, 0)},
+            /* expected_presence= */ {false},
+            /* expected_landmarks_list= */ std::nullopt,
+            /* expected_blendshapes= */ std::nullopt,
+            /*landmarks_diff_threshold= */ kFractionDiff,
+            /*blendshapes_diff_threshold= */ kBlendshapesDiffMargin}),
     [](const TestParamInfo<MultiFaceLandmarksDetectionTest::ParamType>& info) {
       return info.param.test_name;
     });
