@@ -56,10 +56,14 @@ bazel build -c opt --define MEDIAPIPE_DISABLE_GPU=1 mediapipe/surfnet/desktop:su
 
 ```sh
 export GLOG_logtostderr=1
-./bazel-bin/mediapipe/surfnet/desktop/surfnettrack --calculator_graph_config_file=mediapipe/surfnet/graphs/surfnet_track_gpu.pbtxt
+./bazel-bin/mediapipe/surfnet/desktop/surfnettrack --calculator_graph_config_file=mediapipe/surfnet/graphs/tracking/surfnet_track_gpu.pbtxt
 ``` 
 
+to run on a video, you can run the following:
+
+```
 ./bazel-bin/mediapipe/surfnet/desktop/surfnettrack --calculator_graph_config_file=mediapipe/surfnet/graphs/tracking/surfnet_track_gpu.pbtxt --input_video_path=/path/to/video.mp4 --output_video_path=/path/to/output_video.mp4
+```
 
 ### Build Android
 
